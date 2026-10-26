@@ -221,38 +221,29 @@ src/
   config/              状态映射、上游文案、本应用文案（中英）
   dev/demo-data.js     演示报文
 scripts/
-  gen-icons.js          纯 Node 生成两套图标（菜单栏模板图 + 应用 .icns）
+  gen-tray-icon.js     纯 Node 生成菜单栏模板图标（18pt / @2x）
+  gen-app-icon.js      纯 Node 生成 .icns（与托盘同一套几何）
   sign-adhoc.js        打包后整包 ad-hoc 签名 + 清隔离属性
   preview-shot.js      离屏渲染并截图
-assets/                托盘模板图、应用图标、.icns
+assets/                托盘模板图、应用图标
 test/                  纯逻辑单测
 ```
 
 ## 图标
 
-两套图标共用一个母题：**Bambu Lab 的标记 + 一枚小齿轮**。
+菜单栏图标是**模板图**（macOS 只取 alpha 通道，随明暗自动反色），18pt / @2x 两张都由
+`scripts/gen-tray-icon.js` 用纯 Node 栅格化（4× 超采样）生成，不依赖图形库。
 
-标记（两根竖条 + 中间那道闪电形折缝）不是手绘的，而是从 Bambu Studio 自带的
-`Icon.icns` 里**按像素抠出来的真实蒙版**，存成 `assets/bambu-mark.png`（370×482）。
-手绘还原必然走样，而缝宽恰恰是这个标记最认得出的特征——实测 1024 原图里缝只有
-28px 宽，缩到 18pt 就是 1px 出头，宽度偏一点整道折缝就消失。
+形状自下而上读作「宽热床 → 窄喷嘴 → 宽加热块 → 细耗材丝」，逻辑坐标是 18×18 网格。
+18pt 下的可读性全靠**粗细节奏**：喷嘴必须明显窄于加热块，否则两者会融成一个胶囊形，
+整体读成「麦克风」；中间那层「正在打印的薄层」在 18px 下会糊成灰带，所以不放。
 
-- **应用图标**（`assets/icon.icns`）：拓竹绿 `#00AE42` 圆角底板 + 白色标记 + 右下角
-  8 齿齿轮。齿轮与标记**刻意相交**（圆边切进标记约 8% 高度），两者同为白色、
-  按 `max()` 混合后连成一体，读起来是「一台装好齿轮的打印机」而不是「旁边贴了个齿轮」。
-- **菜单栏图标**（`assets/trayTemplate.png` / `@2x`）：**只有标记本身，没有底板也没有齿轮**。
-  macOS 的模板图只取 alpha 通道、随明暗自动反色；18pt 下再塞一个 6px 的齿轮只会
-  变成一团噪点——实测 5/6/7/8/10 齿、径向调制与圆环辐条两种画法，没有一版能在
-  18px 下稳定读出齿来。齿轮留给 1024 的应用图标。
-
-两套都由 `scripts/gen-icons.js` 用纯 Node 栅格化生成（6× / 4× 超采样），不依赖图形库。
+应用图标复用同一套几何（`scripts/gen-app-icon.js`），只是换成蓝底白图：圆角方块加
+竖向渐变（`#3a96ff` → `#0a5ed8`），白色图形等比缩放到图标高度的 80% 并居中。
 
 ```bash
 npm run icon   # 重出菜单栏模板图 + 应用 .icns（改几何后先看 scripts/tray-preview.png）
 ```
-
-> 商标提示：Bambu Lab 的标记是其注册商标。本项目自用没问题；若要公开分发，
-> 图标最好表述为「兼容拓竹」的标识，而不是把拓竹标识当作自有品牌来用。
 
 ---
 
@@ -305,23 +296,13 @@ Developer ID + notarization.
 
 MIT. Upstream modules (`src/core/*`, `locales.js`, `state-map.js`) are © YingyiDai under MIT; `printer-view.js`, both renderer UIs and the tray layer are new.
 
-**Icons.** Both sets share one motif: the Bambu Lab mark plus a small gear. The mark (two
-vertical bars with a lightning-shaped fold down the middle) is not hand-drawn — it is the
-**actual pixel mask** lifted out of Bambu Studio's own `Icon.icns` and kept as
-`assets/bambu-mark.png` (370×482). A redrawn version always drifts, and the seam width is
-precisely what makes the mark recognisable: it measures 28px in the 1024 original, i.e. about
-1px at 18pt, so even a small error erases the fold entirely.
-
-The app icon (`assets/icon.icns`) puts the mark on a Bambu green `#00AE42` rounded plate with
-an 8-tooth gear at the lower right, deliberately **intersecting** the mark (the circle bites
-about 8% into it) so that the two white shapes merge into one silhouette instead of reading as
-a gear pasted next to a logo. The menu bar icon (`assets/trayTemplate.png` / `@2x`) is the
-**bare mark — no plate, no gear**: macOS templates carry only an alpha channel and invert with
-the menu bar, and a 6px gear at 18pt degenerates into noise (5/6/7/8/10 teeth, radial
-modulation and a ring-and-spoke construction were all tried; none read as a gear at that size).
-Both sets are rasterised by `scripts/gen-icons.js` in plain Node (6× / 4× supersampling), with
-no image library involved.
-
-> Trademark note: the Bambu Lab mark is a registered trademark of Bambu Lab. It is fine for
-> personal use; if you redistribute this, present the icon as a "compatible with Bambu" mark
-> rather than as your own brand.
+**Icons.** The menu bar icon is a **template image** (macOS takes only its alpha channel and
+inverts it with the menu bar), rasterised at 18pt and @2x by `scripts/gen-tray-icon.js` in plain
+Node (4× supersampling), with no image library involved. Its shape reads bottom-up as
+*wide heat bed → narrow nozzle → wide heater block → thin filament strand*, laid out on an 18×18
+grid. At 18pt legibility rests entirely on that coarse-to-fine rhythm: the nozzle has to be
+markedly narrower than the heater block, otherwise the two merge into a capsule and the whole
+thing reads as a microphone; the thin "part being printed" layer in the middle would blur into a
+grey band at 18px, so it is left out. The app icon reuses the same geometry
+(`scripts/gen-app-icon.js`) on a rounded square with a vertical gradient (`#3a96ff` → `#0a5ed8`),
+the white glyph scaled to 80% of the icon height and centred.

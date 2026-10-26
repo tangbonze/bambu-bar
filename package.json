@@ -10,7 +10,7 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "demo": "electron . --demo",
-    "icon": "node scripts/gen-icons.js",
+    "icon": "node scripts/gen-tray-icon.js && node scripts/gen-app-icon.js",
     "shot": "electron scripts/preview-shot.js",
     "test": "node --test \"test/*.test.js\"",
     "build:mac": "electron-builder --mac --publish never && node scripts/sign-adhoc.js"
