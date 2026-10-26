@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+  <title>Bambu Bar</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <nav class="side">
+      <div class="logo">
+        <span class="logo-mark">
+          <svg viewBox="0 0 20 20" width="16" height="16">
+            <path d="M10 1.6v3.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            <path d="M6.4 4.8h7.2l-3.6 5.6z" fill="currentColor" />
+            <rect x="3.2" y="12.4" width="13.6" height="1.7" rx="0.85" fill="currentColor" opacity=".9" />
+            <rect x="5.4" y="15.2" width="9.2" height="1.7" rx="0.85" fill="currentColor" opacity=".55" />
+          </svg>
+        </span>
+        <span>Bambu Bar</span>
+      </div>
+      <button class="nav-btn" data-tab="account"></button>
+      <button class="nav-btn" data-tab="printers"></button>
+      <button class="nav-btn" data-tab="general"></button>
+      <button class="nav-btn" data-tab="about"></button>
+    </nav>
+
+    <main class="main" id="main">
+      <!-- ── 账号 ── -->
+      <section class="tab" id="tab-account">
+        <h1 id="h-account"></h1>
+
+        <div class="card" id="acctLogged" hidden>
+          <div class="acct-row">
+            <div class="avatar" id="acctAvatar">B</div>
+            <div class="acct-meta">
+              <div class="acct-name" id="acctName">—</div>
+              <div class="acct-sub" id="acctSub">—</div>
+            </div>
+            <button class="btn danger" id="btnLogout"></button>
+          </div>
+        </div>
+
+        <div id="acctLogin">
+          <div class="field">
+            <label id="lblRegion"></label>
+            <div class="seg" id="segRegion">
+              <button data-region="global"></button>
+              <button data-region="china"></button>
+            </div>
+          </div>
+
+          <div class="card" id="paneGlobal">
+            <div class="pane-title" id="ttlBrowser"></div>
+            <p class="hint" id="hintBrowser"></p>
+            <button class="btn primary lg" id="btnBrowserLogin">—</button>
+          </div>
+
+          <div class="card" id="paneChina" hidden>
+            <div class="seg seg-inline" id="segMode">
+              <button data-mode="code"></button>
+              <button data-mode="password"></button>
+            </div>
+
+            <div id="formCode">
+              <div class="field">
+                <label id="lblPhone"></label>
+                <div class="row">
+                  <input type="tel" id="inPhone" autocomplete="off" spellcheck="false" />
+                  <button class="btn" id="btnSendCode"></button>
+                </div>
+              </div>
+              <div class="field">
+                <label id="lblCode"></label>
+                <input type="text" id="inCode" inputmode="numeric" autocomplete="one-time-code" />
+              </div>
+            </div>
+
+            <div id="formPassword" hidden>
+              <div class="field">
+                <label id="lblAccount"></label>
+                <input type="text" id="inAccount" autocomplete="username" spellcheck="false" />
+              </div>
+              <div class="field">
+                <label id="lblPassword"></label>
+                <input type="password" id="inPassword" autocomplete="current-password" />
+              </div>
+              <div class="field" id="fieldVerify" hidden>
+                <label id="lblVerify"></label>
+                <input type="text" id="inVerify" inputmode="numeric" autocomplete="one-time-code" />
+              </div>
+            </div>
+
+            <button class="btn primary lg" id="btnLogin">—</button>
+          </div>
+
+          <p class="msg" id="msgAccount"></p>
+        </div>
+      </section>
+
+      <!-- ── 打印机 ── -->
+      <section class="tab" id="tab-printers" hidden>
+        <h1 id="h-printers"></h1>
+
+        <h2 id="h-cloud"></h2>
+        <p class="hint" id="hintCloud"></p>
+        <div class="list" id="listCloud"></div>
+
+        <h2 id="h-lan"></h2>
+        <p class="hint" id="hintLan"></p>
+        <div class="list" id="listLan"></div>
+
+        <h2 id="h-addLan"></h2>
+        <div class="card">
+          <div class="grid2">
+            <div class="field">
+              <label id="lblHost"></label>
+              <input type="text" id="inHost" placeholder="192.168.1.42" spellcheck="false" />
+            </div>
+            <div class="field">
+              <label id="lblAccess"></label>
+              <input type="text" id="inAccess" spellcheck="false" />
+            </div>
+            <div class="field">
+              <label id="lblSerial"></label>
+              <input type="text" id="inSerial" spellcheck="false" />
+            </div>
+            <div class="field">
+              <label id="lblName"></label>
+              <input type="text" id="inName" />
+            </div>
+          </div>
+          <button class="btn primary" id="btnAddLan"></button>
+          <p class="msg" id="msgLan"></p>
+        </div>
+      </section>
+
+      <!-- ── 通用 ── -->
+      <section class="tab" id="tab-general" hidden>
+        <h1 id="h-general"></h1>
+
+        <div class="card">
+          <div class="field">
+            <label id="lblTheme"></label>
+            <select id="selTheme">
+              <option value="system" id="optThemeSystem"></option>
+              <option value="light" id="optThemeLight"></option>
+              <option value="dark" id="optThemeDark"></option>
+            </select>
+            <p class="hint" id="hintTheme"></p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="field">
+            <label id="lblLang"></label>
+            <select id="selLang">
+              <option value="zh-CN">中文</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+          <div class="field">
+            <label id="lblPoll"></label>
+            <select id="selPoll">
+              <option value="30000" id="optPollFast"></option>
+              <option value="45000" id="optPollNormal"></option>
+              <option value="90000" id="optPollSlow"></option>
+            </select>
+            <p class="hint" id="hintPoll"></p>
+          </div>
+        </div>
+
+        <div class="card">
+          <label class="switch-row">
+            <span>
+              <span class="switch-title" id="ttlTrayPct"></span>
+              <span class="switch-desc" id="descTrayPct"></span>
+            </span>
+            <input type="checkbox" id="swTrayPct" />
+          </label>
+          <label class="switch-row">
+            <span>
+              <span class="switch-title" id="ttlLaunch"></span>
+            </span>
+            <input type="checkbox" id="swLaunch" />
+          </label>
+          <label class="switch-row">
+            <span>
+              <span class="switch-title" id="ttlNotify"></span>
+              <span class="switch-desc" id="descNotify"></span>
+            </span>
+            <input type="checkbox" id="swNotify" />
+          </label>
+        </div>
+      </section>
+
+      <!-- ── 关于 ── -->
+      <section class="tab" id="tab-about" hidden>
+        <h1 id="h-about"></h1>
+        <div class="card about">
+          <div class="about-name">Bambu Bar</div>
+          <div class="about-ver" id="aboutVer"></div>
+          <p class="hint" id="aboutDisclaimer"></p>
+        </div>
+        <div class="card">
+          <div class="switch-title" id="ttlDiag"></div>
+          <p class="hint" id="descDiag"></p>
+          <div class="row" style="gap:8px">
+            <button class="btn" id="btnDiag"></button>
+            <button class="btn" id="btnData"></button>
+          </div>
+          <p class="msg" id="msgAbout"></p>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,159 @@
+const { VIDEO } = require('../config/state-map');
+const { isFreshStartFinish } = require('./state-machine');
+
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+// 成功动画（finished.webm）展示时长：结束后 1 小时内演庆祝动画，之后转空闲动画。
+// 注意这只是**动画**的边界——完成时刻标签（相对时间）在整个完成记忆期内一直显示，与动画解耦。
+const SUCCESS_DISPLAY_MS = 60 * MINUTE_MS;
+const FINISHED_MEMORY_MS = 24 * 60 * MINUTE_MS;
+const ACTIVE_GCODE_STATES = new Set(['PREPARE', 'RUNNING', 'PAUSE', 'SLICING']);
+// 任务标识字段（用于识别「换了新任务」→ 重开 1 小时成功动画）。
+// 云端任务 id（subtask_id/task_id/project_id）在联网打印时是全局唯一值，最可靠；
+// 但 P1S/A1 等在**局域网直连**打印时这三者恒为占位符 "0"（真实 id 只在云端任务里生成，
+// 经真机报文取证 + pybambu 佐证——pybambu 干脆不解析这三个字段），此时必须回落到
+// 每份作业各异的 gcode_file / subtask_name / file 才能把两次不同的打印区分开。
+const TASK_ID_FIELDS = ['subtask_id', 'task_id', 'project_id', 'gcode_file', 'subtask_name', 'file'];
+// 占位符取值：局域网打印时云端 id 恒为 "0"，空串同理，都不能当作真实任务标识。
+const PLACEHOLDER_TASK_IDS = new Set(['', '0']);
+
+// 收集报文里所有「非占位符」的任务标识字段 → { field: value }。
+// 与单值 taskIdFromReport 的关键区别：不是只取优先级最高的一个，而是**全部**留存，
+// 用于跨帧/跨重启做「按字段」比对（见 isDifferentTask）。占位符（'' / '0'）一律剔除。
+function taskIdentityFromReport(report) {
+  const identity = {};
+  for (const key of TASK_ID_FIELDS) {
+    const value = report && report[key];
+    if (value == null) continue;
+    const str = String(value).trim();
+    if (str !== '' && !PLACEHOLDER_TASK_IDS.has(str)) identity[key] = str;
+  }
+  return identity;
+}
+
+function taskIdFromReport(report) {
+  for (const key of TASK_ID_FIELDS) {
+    const value = report && report[key];
+    if (value == null) continue;
+    const str = String(value).trim();
+    if (str !== '' && !PLACEHOLDER_TASK_IDS.has(str)) return str;
+  }
+  return null;
+}
+
+// 「是否换了新任务」：只有当**双方都存在**的某个字段取值不同（正面矛盾）时才判为新任务。
+// 关键修复：某字段在其中一侧「消失/变占位符」不算矛盾——这正是重启后云端 id 被清成 "0"、
+// 身份回落到 gcode_file 而与旧记录里的 subtask_id 对不上，导致完成时刻被误重置成重启时刻的根因。
+function isDifferentTask(prevIdentity, curIdentity) {
+  const prev = prevIdentity || {};
+  for (const key of TASK_ID_FIELDS) {
+    if (prev[key] != null && curIdentity[key] != null && prev[key] !== curIdentity[key]) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// 归一化持久化记录为 { finishedAt, identity }。
+// 兼容旧格式 { finishedAt, taskId }：旧记录只有单个不带字段名的 id，无法安全地按字段比对，
+// 故迁移为「无可比字段」（identity: {}）——即绝不因旧记录而误判新任务（避免升级后再触发一次本 bug）；
+// 下一帧 FINISH 会用报文里的完整身份把 identity 补全（自愈），之后比对即为精确的按字段比对。
+function normalizeRecord(record) {
+  if (!record || !Number.isFinite(record.finishedAt)) return null;
+  const identity = {};
+  const src = record.identity;
+  if (src && typeof src === 'object') {
+    for (const key of TASK_ID_FIELDS) {
+      if (src[key] != null) identity[key] = String(src[key]);
+    }
+  }
+  return { finishedAt: record.finishedAt, identity };
+}
+
+function makeFinishedState(state, labelKey = 'label.finished', labelParams = {}) {
+  return {
+    ...state,
+    stateKey: 'finished',
+    videoFile: VIDEO.finished,
+    labelKey,
+    labelParams,
+  };
+}
+
+// 相对完成时间「下一次跳字」的时刻：不足 1 小时按整分钟边界（"刚刚"→"1 分钟前"→…），
+// 之后按整小时边界（"1 小时前"→"2 小时前"→…）。据此安排定时刷新，标签不靠报文重发也能及时更新。
+// 键（分钟/小时）的最终选择留给渲染层在真正显示时按当时时间算，避免报文时刻算出的字面量到渲染时已过期。
+function nextRelativeBoundary(finishedAt, now) {
+  const age = Math.max(0, now - finishedAt);
+  if (age < HOUR_MS) {
+    return finishedAt + (Math.floor(age / MINUTE_MS) + 1) * MINUTE_MS;
+  }
+  return finishedAt + (Math.floor(age / HOUR_MS) + 1) * HOUR_MS;
+}
+
+function makeIdleState(state, labelKey = 'label.idle', labelParams = {}) {
+  return {
+    ...state,
+    stateKey: 'idle',
+    videoFile: VIDEO.idle,
+    labelKey,
+    labelParams,
+  };
+}
+
+function applyCompletionState(report, state, savedRecord, now = Date.now()) {
+  const gcode = report && report.gcode_state;
+  let record = normalizeRecord(savedRecord);
+
+  // 开印瞬间 gcode_state 仍残留上一次 FINISH 的过渡帧（新任务已停在第 0 层、进度未满）不是真完成，
+  // 按「开印」处理：清除上次完成记录、原样返回（此时 state 已由 resolveState 判为准备中），
+  // 避免这一帧被记成一次「刚刚完成」而闪现「完成」。
+  if (ACTIVE_GCODE_STATES.has(gcode) || (gcode === 'FINISH' && isFreshStartFinish(report))) {
+    return { state, record: null, nextUpdateAt: null };
+  }
+
+  if (gcode === 'FINISH') {
+    const identity = taskIdentityFromReport(report);
+    if (!record || isDifferentTask(record.identity, identity)) {
+      // 新任务（或首次见到完成）→ 记新的完成时刻。
+      record = { finishedAt: now, identity };
+    } else {
+      // 同一任务：保留原完成时刻，并把本帧新出现的身份字段并入 identity（自愈/补全，供后续精确比对）。
+      record = { finishedAt: record.finishedAt, identity: { ...record.identity, ...identity } };
+    }
+  }
+
+  if (!record || (gcode !== 'FINISH' && gcode !== 'IDLE')) {
+    return { state, record, nextUpdateAt: null };
+  }
+
+  const age = Math.max(0, now - record.finishedAt);
+
+  if (age < FINISHED_MEMORY_MS) {
+    // 完成时刻标签在整个记忆期内一直显示相对时间（刚刚/X 分钟前/X 小时前），与动画解耦。
+    // 只传原始时间戳、不在此格式化：主进程 Node 读不到 macOS 的 24 小时制设置，且相对时间要按
+    // 「渲染那一刻」的当前时间算才准；真正的相对文案由渲染进程/托盘就地生成（见 fmtFinishedRelative）。
+    const labelParams = { finishedAt: record.finishedAt };
+    // 定时刷新排到「相对时间下一次跳字」处；跨过 1 小时动画边界时也会命中（整分钟步进恰好落在 60 分钟），
+    // 那一帧 age≥SUCCESS_DISPLAY_MS，自然从成功动画切到空闲动画。最迟不超过记忆过期点。
+    const nextUpdateAt = Math.min(
+      nextRelativeBoundary(record.finishedAt, now),
+      record.finishedAt + FINISHED_MEMORY_MS,
+    );
+    // 结束后 1 小时内继续演成功动画（庆祝），标签同时显示相对完成时间；之后转空闲动画。
+    const state2 = age < SUCCESS_DISPLAY_MS
+      ? makeFinishedState(state, 'label.finishedAt', labelParams)
+      : makeIdleState(state, 'label.finishedAt', labelParams);
+    return { state: state2, record, nextUpdateAt };
+  }
+
+  return { state: makeIdleState(state), record, nextUpdateAt: null };
+}
+
+module.exports = {
+  SUCCESS_DISPLAY_MS,
+  FINISHED_MEMORY_MS,
+  applyCompletionState,
+  taskIdFromReport,
+  taskIdentityFromReport,
+};

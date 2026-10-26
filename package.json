@@ -1,0 +1,66 @@
+{
+  "name": "bambu-bar",
+  "version": "1.0.0",
+  "description": "macOS 菜单栏里的拓竹（Bambu Lab）打印机实时状态面板 / Live status panel for Bambu Lab printers in the macOS menu bar",
+  "author": "冯轲 Ke Feng",
+  "main": "src/main.js",
+  "license": "MIT",
+  "private": false,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "demo": "electron . --demo",
+    "icon": "node scripts/gen-icons.js",
+    "shot": "electron scripts/preview-shot.js",
+    "test": "node --test \"test/*.test.js\"",
+    "build:mac": "electron-builder --mac --publish never && node scripts/sign-adhoc.js"
+  },
+  "dependencies": {
+    "electron-store": "8.2.0",
+    "mqtt": "^5.10.1"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.bambubar.menubar",
+    "productName": "Bambu Bar",
+    "files": [
+      "src/**/*",
+      "assets/**"
+    ],
+    "mac": {
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.utilities",
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "extendInfo": {
+        "LSUIElement": true
+      }
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tangbonze/bambu-bar"
+  },
+  "homepage": "https://github.com/tangbonze/bambu-bar",
+  "keywords": [
+    "bambu",
+    "bambulab",
+    "3d-printing",
+    "macos",
+    "electron",
+    "menubar",
+    "menu-bar"
+  ],
+  "bugs": {
+    "url": "https://github.com/tangbonze/bambu-bar/issues"
+  }
+}

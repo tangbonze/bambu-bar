@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.DS_Store
+
+# 本地数据与日志（绝不入库：可能含账号令牌）
+*.log
+config.json
+.env
+.env.*
+
+# 打包中间产物
+assets/icon.iconset/
