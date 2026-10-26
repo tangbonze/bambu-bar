@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 /**
- * 给 electron-builder 产出的 .app 做一次整包 ad-hoc 签名。
+ * electron-builder afterPack 钩子：给产出的 .app 做一次整包 ad-hoc 签名。
  *
- * 为什么需要：没有 Developer ID 证书时，electron-builder 会跳过签名，
+ * 为什么要签名：没有 Developer ID 证书时 electron-builder 会跳过签名，
  * 而 Electron 自带的二进制只有 linker 阶段的 ad-hoc 签名
  * （`CodeDirectory flags=adhoc,linker-signed`、`Sealed Resources=none`）。
  * 这种签名与打包进去的资源不匹配，`codesign --verify` 会报
  * "code has no resources but signature indicates they must be present"，
  * 双击时 macOS 也可能判成「已损坏」。重新签一遍即可自洽。
  *
- * 用法：node scripts/sign-adhoc.js [app 路径]
+ * 在 afterPack 阶段执行，DMG 里打进去的就是已签名的 app。
+ *
+ * 用法：由 electron-builder 自动调用，也可手动执行
+ *   node scripts/sign-adhoc.js [app 路径]
  */
 'use strict';
 

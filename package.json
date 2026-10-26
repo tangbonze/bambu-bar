@@ -30,12 +30,19 @@
       "src/**/*",
       "assets/**"
     ],
+    "afterPack": "./scripts/after-pack.js",
     "mac": {
       "icon": "assets/icon.icns",
       "category": "public.app-category.utilities",
       "target": [
         {
           "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "dmg",
           "arch": [
             "arm64"
           ]
