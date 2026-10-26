@@ -129,23 +129,25 @@ npm run demo       # 没有打印机也能看效果（4 台演示机，走真实
 npm run build:mac  # 打包 + ad-hoc 签名 → dist/mac-arm64/Bambu Bar.app
 npm test           # 纯逻辑单测（16 个用例）
 npm run shot       # 离屏渲染面板/设置窗截图到 preview/
+npm run xhs        # 生成小红书图文（8 张 1080×1440）到 xhs/
 ```
 
-打包产物（`electron-builder` 的 `dir` 目标，仅 arm64，不生成 dmg）：
+打包产物（`electron-builder`，仅 arm64，同时产出 `dir` 与 `dmg`）：
 
 | 项 | 值 |
 | --- | --- |
-| 路径 | `dist/mac-arm64/Bambu Bar.app` |
-| 体积 | 约 259 MB（Electron 38.8.6 全量） |
+| 应用 | `dist/mac-arm64/Bambu Bar.app`（约 259 MB，Electron 38.8.6 全量） |
+| 安装包 | `dist/Bambu Bar-1.0.0-arm64.dmg`（约 104 MB，APFS 格式） |
 | Bundle ID | `com.bambubar.menubar`（`LSUIElement=true`，不占程序坞） |
-| 签名 | ad-hoc（`npm run build:mac` 末尾自动执行 `scripts/sign-adhoc.js`） |
+| 签名 | ad-hoc，在 `afterPack` 阶段执行（`scripts/after-pack.js`） |
 | 校验 | `codesign --verify --deep --strict` 通过；启动后 `--demo` 能解析出 4 台演示机 |
 
 > **为什么要额外 ad-hoc 签一次**：没有 Developer ID 证书时 electron-builder 会跳过签名，
 > 此时包内 Electron 只有 linker 阶段的 ad-hoc 签名（`Sealed Resources=none`），
 > 与打包进去的资源不匹配，`codesign --verify` 会报 *code has no resources but signature
-> indicates they must be present*，双击可能被判成「已损坏」。`scripts/sign-adhoc.js`
-> 对整包重签并顺带清掉隔离属性。**未做 Apple 公证**，分发给别人仍需 Developer ID + notarize。
+> indicates they must be present*，双击可能被判成「已损坏」。`scripts/after-pack.js`
+> 在打包完成、生成 DMG 之前对整包重签并顺带清掉隔离属性 —— 所以 DMG 里打进去的
+> 已经是签好的 app。**未做 Apple 公证**，分发给别人仍需 Developer ID + notarize。
 
 若首次打开仍被 Gatekeeper 拦：右键 →「打开」，或 `xattr -dr com.apple.quarantine "dist/mac-arm64/Bambu Bar.app"`。
 
@@ -223,8 +225,10 @@ src/
 scripts/
   gen-tray-icon.js     纯 Node 生成菜单栏模板图标（18pt / @2x）
   gen-app-icon.js      纯 Node 生成 .icns（与托盘同一套几何）
-  sign-adhoc.js        打包后整包 ad-hoc 签名 + 清隔离属性
+  after-pack.js        electron-builder afterPack 钩子：整包 ad-hoc 签名 + 清隔离属性
+  sign-adhoc.js        独立签名脚本（也可手动执行）
   preview-shot.js      离屏渲染并截图
+  gen-xhs.js           生成小红书图文（8 张 1080×1440）
 assets/                托盘模板图、应用图标
 test/                  纯逻辑单测
 ```
@@ -285,12 +289,14 @@ npm run demo                  # 4 fake printers through the real parsing pipelin
 npm run build:mac             # build + ad-hoc sign → dist/mac-arm64/Bambu Bar.app
 npm test                      # 16 pure-logic tests
 npm run shot                  # offscreen-render the screenshots in preview/
+npm run xhs                   # render the 8 Xiaohongshu-sized images (1080×1440) into xhs/
 ```
 
-**Build output:** `dir` target only (arm64, no dmg), ~259 MB, bundle id `com.bambubar.menubar`
+**Build output:** arm64 only, both `dir` and `dmg` targets — `dist/mac-arm64/Bambu Bar.app`
+(~259 MB) and `dist/Bambu Bar-1.0.0-arm64.dmg` (~104 MB, APFS). Bundle id `com.bambubar.menubar`
 with `LSUIElement=true`. electron-builder skips signing without a Developer ID, leaving only the
-linker-stage ad-hoc signature that mismatches the bundled resources —
-`scripts/sign-adhoc.js` re-signs the whole bundle and is wired into `npm run build:mac`.
+linker-stage ad-hoc signature that mismatches the bundled resources — `scripts/after-pack.js`
+re-signs the whole bundle in the `afterPack` hook, so the DMG already contains a signed app.
 Verified with `codesign --verify --deep --strict`. Not notarized; redistributing needs a
 Developer ID + notarization.
 

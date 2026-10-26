@@ -10,3 +10,6 @@ config.json
 
 # 打包中间产物
 assets/icon.iconset/
+
+# 小红书图文生成产物（用 npm run xhs 重新生成）
+xhs/

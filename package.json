@@ -12,6 +12,7 @@
     "demo": "electron . --demo",
     "icon": "node scripts/gen-tray-icon.js && node scripts/gen-app-icon.js",
     "shot": "electron scripts/preview-shot.js",
+    "xhs": "node scripts/gen-xhs.js",
     "test": "node --test \"test/*.test.js\"",
     "build:mac": "electron-builder --mac --publish never && node scripts/sign-adhoc.js"
   },
