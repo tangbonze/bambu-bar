@@ -12,15 +12,18 @@
 └───────────────────────────────┘
 ```
 
-![面板](preview/popover.png)
-
 <p align="center">
-  <img src="preview/popover-dark.png" width="250" alt="中文 · 深色">
-  <img src="preview/popover-en.png" width="250" alt="English · light">
-  <img src="preview/settings-printers.png" width="250" alt="设置窗 · 打印机">
+  <img src="preview/popover.png" width="262" alt="面板 · 中文 · 浅色">
+  <img src="preview/popover-dark.png" width="262" alt="面板 · 中文 · 深色">
+  <img src="preview/popover-en.png" width="262" alt="Panel · English">
 </p>
 
-> 截图由 `npm run shot` 离屏渲染真实解析链路的输出，不是手绘示意图。
+<p align="center">
+  <img src="preview/settings-general.png" width="376" alt="设置窗 · 通用">
+  <img src="preview/settings-printers.png" width="376" alt="设置窗 · 打印机">
+</p>
+
+> 截图由 `npm run shot` 离屏渲染真实解析链路的输出，不是手绘示意图；点开可看原尺寸。
 
 ## 它显示什么
 
@@ -267,12 +270,15 @@ A macOS menu bar app: **click the icon to see the live status of every Bambu Lab
 
 Built on top of [YingyiDai/bambu-buddy](https://github.com/YingyiDai/bambu-buddy) (the desktop panda). The upstream project turns *printer status → desktop animation*; this one reuses its connection and parsing layers and turns *printer status → a menu bar panel*, surfacing every field upstream already parses but the panda had no use for.
 
-![panel](preview/popover.png)
+<p align="center">
+  <img src="preview/popover-en.png" width="262" alt="Panel · English · light">
+  <img src="preview/popover-en-dark.png" width="262" alt="Panel · English · dark">
+  <img src="preview/popover.png" width="262" alt="面板 · 中文 · 浅色">
+</p>
 
 <p align="center">
-  <img src="preview/popover-dark.png" width="250" alt="Chinese · dark">
-  <img src="preview/popover-en.png" width="250" alt="English · light">
-  <img src="preview/settings-printers.png" width="250" alt="Settings · printers">
+  <img src="preview/settings-general-en.png" width="376" alt="Settings · general">
+  <img src="preview/settings-printers-en.png" width="376" alt="Settings · printers">
 </p>
 
 **What each card shows:** status (printing / preparing with exact `stg_cur` stage / changing filament / paused with reason / finished / failed with official HMS category / offline / session expired), job name, percent, layer, remaining time, estimated finish time in your timezone (with `+1` day markers), nozzle / bed temperatures, current filament colour, every AMS slot plus the external spool, the AMS unit's own internal humidity band and temperature (`ams.ams[].humidity` / `.temp` — not the printer's chamber temperature, which is model-gated separately), speed profile, WiFi signal, nozzle spec, fans, chamber light, door, HMS codes and the official failure reason.
