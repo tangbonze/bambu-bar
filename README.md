@@ -74,12 +74,15 @@
 | 有颜色 | 实心圆点，直接设 `--c` |
 | `alpha = 00` | 斜纹灰点（`.slot.unknown`）—— 真机空槽报 `00000000`，若取前 6 位会被误当成黑料 |
 | 当前出料槽 | 外加一圈蓝色双环（`.slot.active`） |
-| 外挂料盘 | 圆点画成方形实线框（`.slot.ext`），与 AMS 槽区分 |
+| 外挂料盘 | 和 AMS 槽一样的圆点 —— 来源靠「外置」标签区分，不靠形状 |
 
 耗材这一行分两段，各带一个标签：`AMS` 和 `外置`。**没接的那段整段不渲染** ——
 标签只在真有这个来源时出现（`.ams-tag`，主色淡底），不存在「灰色占位」状态：
-A1 mini 只挂外挂料盘，就只画 `外置 ▢`；接了 AMS 没接外挂，就只画 `AMS … ● ● ● ●`。
+A1 mini 只挂外挂料盘，就只画 `外置 ●`；接了 AMS 没接外挂，就只画 `AMS … ● ● ● ●`。
 分隔符也只在两段都在时才画。
+
+> 外置料盘早前画的是方块（靠形状与 AMS 槽区分），后来改成圆点：两种形状并排会让人
+> 以为「外置」是另一种东西，而来源标签已经说清楚了。
 
 AMS 的温湿度（`偏干 · 24°`）紧跟在 `AMS` 标签后面，留在 AMS 段里 —— 它是 AMS 单元自带
 传感器的读数（`ams.ams[].humidity` / `.temp`），既不是打印机腔温，也不属于外置料盘；
@@ -295,7 +298,7 @@ Built on top of [YingyiDai/bambu-buddy](https://github.com/YingyiDai/bambu-buddy
 
 **Colours** are keyed to *status*, not to the printer: a printer changes state and the whole card changes colour, while two printers in the same state share it. Six semantic colours, one set for light and one for dark (`src/popover/style.css:22-26` / `46-50`): printing `#0a7cff` / `#4c9dff`, paused `#d98300` / `#ffb340`, failed `#d92d20` / `#ff6369`, finished `#1f9d4d` / `#4ac26b`, idle `#86868b` / `#9b9ba2`, offline `#b4b4b9` / `#6a6a72`. `statusClassFromStateKey()` (`src/core/live-telemetry.js:16-27`) folds all 78 `stg_cur` stages into those six; its `default` branch means every recognised-but-unlisted stage counts as printing, so preparing and changing filament get no hue of their own — keeping the palette at six hues is what lets an outlier jump out while scanning. The chosen colour lands in the CSS variable `--st`, shared by four places: the 3px bar down the left of the card, the dot beside the title (pulsing while printing), the status text on the right, and the progress-bar fill.
 
-Filament swatches are a second, independent colour source, reported by the printer as `tray_color` in `RRGGBBAA` rather than defined by the app. `alpha = 00` means "no colour" and renders as a hatched grey dot — real printers report `00000000` for an empty slot, so reading only the first six digits would show it as black filament. The row is split into an `AMS` segment and an `EXT` (external spool) segment, each with its own label; a segment the machine does not have is simply not rendered (no greyed-out placeholder, and the divider only appears when both segments exist). Two labels rather than one because an A1 mini with only an external spool used to render that spool behind the single `AMS` label, which read as "a roll loaded in the AMS". The currently extruding slot gets a blue double ring, the external spool is drawn as a square with a solid outline (shape alone keeps it distinct from the round AMS slots, and the solid outline keeps white filament from looking like an empty slot), and while printing the progress bar fill now follows the status colour like every other accent (blue printing / amber paused / red failed / green finished) rather than the filament colour — a black filament turned the bar into a black stripe that clashed with the card's semantic palette and no longer read as "printing". The filament colour stays where it belongs, on the swatch dots.
+Filament swatches are a second, independent colour source, reported by the printer as `tray_color` in `RRGGBBAA` rather than defined by the app. `alpha = 00` means "no colour" and renders as a hatched grey dot — real printers report `00000000` for an empty slot, so reading only the first six digits would show it as black filament. The row is split into an `AMS` segment and an `EXT` (external spool) segment, each with its own label; a segment the machine does not have is simply not rendered (no greyed-out placeholder, and the divider only appears when both segments exist). Two labels rather than one because an A1 mini with only an external spool used to render that spool behind the single `AMS` label, which read as "a roll loaded in the AMS". The currently extruding slot gets a blue double ring, and the external spool is drawn as the same round dot as an AMS slot — the segment label already says where the filament comes from, and two shapes side by side read as two different kinds of material (it used to be a square). While printing, the progress bar fill follows the status colour like every other accent (blue printing / amber paused / red failed / green finished) rather than the filament colour — a black filament turned the bar into a black stripe that clashed with the card's semantic palette and no longer read as "printing". The filament colour stays where it belongs, on the swatch dots.
 
 **Appearance** lives in Settings → General (follow system / light / dark) and applies instantly without a restart: the setting only writes `nativeTheme.themeSource`, and both windows take their colours from CSS `prefers-color-scheme`. The panel header keeps a single refresh button — the icon that used to sit there read as a brightness toggle while actually opening settings, so the only settings entry is now the footer link.
 

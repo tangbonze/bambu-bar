@@ -272,7 +272,9 @@ function updateCard(v) {
       const extTag = el('span', 'ams-tag', t('card.ext'));
       extTag.title = t('card.amsExt');
       q.ams.append(extTag);
-      const d = el('span', 'slot ext'
+      // 外置料盘的圆点和 AMS 槽长得一模一样 —— 来源靠前面的「外置」标签区分。
+      // 早前这里画的是方块（形状区分来源），但两种形状并排会让人以为外置料是另一种东西。
+      const d = el('span', 'slot'
         + (f.external.color ? '' : ' unknown')
         + (f.external.active ? ' active' : ''));
       if (f.external.color) d.style.setProperty('--c', f.external.color);

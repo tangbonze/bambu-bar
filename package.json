@@ -1,6 +1,6 @@
 {
   "name": "bambu-bar",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "macOS 菜单栏里的拓竹（Bambu Lab）打印机实时状态面板 / Live status panel for Bambu Lab printers in the macOS menu bar",
   "author": "冯轲 Ke Feng",
   "main": "src/main.js",

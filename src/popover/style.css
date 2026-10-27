@@ -294,12 +294,8 @@ body {
 .slot.active {
   box-shadow: 0 0 0 1.5px var(--card), 0 0 0 3px var(--c-printing);
 }
-/* 外置料盘：形状（方）已足够和 AMS 的圆点区分，边框用实线 ——
-   以前这里靠虚线表示「没接」，现在没接就不渲染，方框恒表示「有料」。 */
-.slot.ext {
-  border-radius: 4px;
-  border: 1px solid color-mix(in srgb, var(--muted) 60%, transparent);
-}
+/* 外置料盘不再有自己的样式：圆点、边框、空槽斜纹、激活蓝环全部与 AMS 槽一致，
+   来源只靠前面的「外置」标签区分。早前外置画的是方块，形状并排会让人误以为是另一种东西。 */
 /* 段内分隔（AMS 多单元之间、AMS 段与外置段之间）。
    两段之间那道要更宽一点：AMS 段里既有料点又有温湿度，边界不拉开容易读成同一串。 */
 .ams-sep { width: 1px; height: 11px; background: var(--line); margin: 0 4px; }
