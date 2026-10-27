@@ -310,9 +310,12 @@ body {
   border-style: dashed;
   opacity: .5;
 }
-.ams-sep { width: 1px; height: 11px; background: var(--line); margin: 0 2px; }
-/* 湿度 / 温度：跟着 AMS 段走，不参与两个标签的对齐 */
-.ams-meta { color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 2px; }
+/* 段内分隔（AMS 多单元之间、AMS 段与外置段之间）。
+   两段之间那道要更宽一点：AMS 段里既有料点又有温湿度，边界不拉开容易读成同一串。 */
+.ams-sep { width: 1px; height: 11px; background: var(--line); margin: 0 4px; }
+/* AMS 单元上报的温湿度（AMS 内部传感器，不是打印机腔温）：紧跟在 AMS 标签后面，
+   属于 AMS 段，不属于外置段。 */
+.ams-meta { color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* 任务名 */
 .job {

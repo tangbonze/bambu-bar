@@ -31,7 +31,7 @@
 | 状态 | 打印中 / 准备中（含 78 种 `stg_cur` 阶段精确文案）/ 换料中 / 暂停（缺料、堵头、温控异常、首层异常、舱门…）/ 完成 / 失败（按官方 HMS 码表归到「断料 / 堵头 / 温度 / 机械 / 校准 / 打印板 / 喷嘴 / AMS」大类）/ 离线 / 登录失效 |
 | 任务 | 文件名（`subtask_name` / `gcode_file`）、进度百分比、当前层 / 总层、剩余时间、**按本机时区算出的预计完成时刻**（跨自然日标 `+1`、`+2`） |
 | 温度 | 喷嘴（当前 / 目标）、热床（当前 / 目标）；腔温**只在带腔温控制器的机型上显示**（H2C / H2D / H2D Pro / H2S / X1E / X2D），其余机型整行不显示 |
-| 耗材 | 当前耗材颜色（双喷头按 `extruder.snow` 定位主喷头）、AMS 各槽颜色 + 材料 + 余量（悬停查看）、外置耗材单列（`AMS` / `外置` 两个标签各自亮起或置灰）、AMS 湿度档与仓温 |
+| 耗材 | 当前耗材颜色（双喷头按 `extruder.snow` 定位主喷头）、AMS 各槽颜色 + 材料 + 余量（悬停查看）、外置耗材单列（`AMS` / `外置` 两个标签各自亮起或置灰）、AMS 内部温湿度（`ams.ams[].humidity` / `.temp`，**不是**打印机腔温） |
 | 机器 | 速度档（静音 / 标准 / 运动 / 狂暴 + 倍率）、WiFi 信号、喷嘴直径与材质、风扇（模型 / 辅助 / 腔体）、腔灯、舱门 |
 | 错误 | HMS 码（16 位十六进制，悬停显示官方文案）、`fail_reason` 与官方原因长句 |
 
@@ -74,7 +74,10 @@
 | 外挂料盘 | 圆点画成方形实线框（`.slot.ext`），与 AMS 槽区分；没接时只剩半透明虚框占位 |
 
 耗材这一行分两段，各带一个标签：`AMS` 和 `外置`。标签的状态就是这台机器的配置 ——
-**有料亮起（`.ams-tag.on`，主色淡底）、没接置灰**。之所以要两个标签：A1 mini 这类只挂
+**有料亮起（`.ams-tag.on`，主色淡底）、没接置灰**。AMS 的温湿度（`偏干 · 24°`）紧跟在
+`AMS` 标签后面，留在 AMS 段里 —— 它是 AMS 单元自带传感器的读数（`ams.ams[].humidity` /
+`.temp`），既不是打印机腔温，也不属于外置料盘；早前画在行末，被读成「外置 24°」。
+之所以要两个标签：A1 mini 这类只挂
 外挂料盘、不带 AMS 的机器，最早的版本把料点挂在唯一的「AMS」标签后面，读起来像
 「AMS 里装着一卷白料」。机器没接外挂时标签后面留一个空心虚框（`.slot.ext.none`）占位，
 四台机器横着扫的时候两段位置一致。
@@ -271,7 +274,7 @@ Built on top of [YingyiDai/bambu-buddy](https://github.com/YingyiDai/bambu-buddy
   <img src="preview/settings-printers.png" width="250" alt="Settings · printers">
 </p>
 
-**What each card shows:** status (printing / preparing with exact `stg_cur` stage / changing filament / paused with reason / finished / failed with official HMS category / offline / session expired), job name, percent, layer, remaining time, estimated finish time in your timezone (with `+1` day markers), nozzle / bed temperatures, current filament colour, every AMS slot plus the external spool and AMS humidity, speed profile, WiFi signal, nozzle spec, fans, chamber light, door, HMS codes and the official failure reason.
+**What each card shows:** status (printing / preparing with exact `stg_cur` stage / changing filament / paused with reason / finished / failed with official HMS category / offline / session expired), job name, percent, layer, remaining time, estimated finish time in your timezone (with `+1` day markers), nozzle / bed temperatures, current filament colour, every AMS slot plus the external spool, the AMS unit's own internal humidity band and temperature (`ams.ams[].humidity` / `.temp` — not the printer's chamber temperature, which is model-gated separately), speed profile, WiFi signal, nozzle spec, fans, chamber light, door, HMS codes and the official failure reason.
 
 **Chamber temperature is model-gated.** Printers without a chamber sensor still report a `chamber_temper` field, but on an A1 / P1S / P1Sc it is a fixed `5` — all three of mine report the same value while their nozzles sit at 21–24 °C and beds at 21–22 °C, i.e. room temperature. It is a firmware placeholder, not a reading, so showing it produces a fake temperature. The capability list therefore comes from Bambu Studio's own machine profiles (`support_chamber_temp_control`; every model defaults to 0 and only H2C, H2D, H2D Pro, H2S, X1E and X2D override it to 1 — note X1 Carbon is 0). A `device.ctc.info.temp` field in the report wins over the list, so a newly released model works without waiting for an update. See `resolveChamberTemp()` in `src/core/printer-view.js`.
 

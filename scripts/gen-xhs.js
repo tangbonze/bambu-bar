@@ -393,7 +393,7 @@ pages.push({
       </div>
       <div class="card" style="padding:22px 26px">
         <h3 style="font-size:27px">耗材</h3>
-        <p style="font-size:20px">当前耗材颜色 · AMS 各槽颜色+材料+余量 · 外置耗材单列 · AMS 湿度档与仓温</p>
+        <p style="font-size:20px">当前耗材颜色 · AMS 各槽颜色+材料+余量 · 外置耗材单列 · AMS 内部温湿度</p>
       </div>
       <div class="card" style="padding:22px 26px">
         <h3 style="font-size:27px">机器</h3>

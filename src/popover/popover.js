@@ -250,6 +250,20 @@ function updateCard(v) {
     const amsTag = el('span', 'ams-tag' + (amsSlots ? ' on' : ''), t('card.ams'));
     amsTag.title = amsSlots ? t('card.slots', { n: amsSlots }) : t('card.amsOff');
     q.ams.append(amsTag);
+
+    // AMS 自身的温湿度紧跟在「AMS」标签后面 —— 它是 AMS 单元上报的读数，
+    // 既不是打印机腔温（那条走 chamber_temper / device.ctc，按机型门控），
+    // 也不是外置料盘的属性。放在行末（外置段之后）会被读成「外置 29°」。
+    const info = [];
+    const u0 = units[0];
+    if (u0 && u0.humidityText) info.push(t('hum.' + u0.humidityText));
+    if (u0 && u0.temp != null) info.push(`${Math.round(u0.temp)}°`);
+    if (info.length) {
+      const meta = el('span', 'ams-meta', info.join(' · '));
+      meta.title = t('card.amsEnv');
+      q.ams.append(meta);
+    }
+
     units.forEach((u, ui) => {
       if (ui > 0) q.ams.append(el('span', 'ams-sep'));
       for (const s of u.slots) {
@@ -272,12 +286,6 @@ function updateCard(v) {
     if (hasExt && f.external.color) d.style.setProperty('--c', f.external.color);
     d.title = hasExt ? t('card.amsExt') : t('card.extOff');
     q.ams.append(d);
-
-    const info = [];
-    const u0 = units[0];
-    if (u0 && u0.humidityText) info.push(t('hum.' + u0.humidityText));
-    if (u0 && u0.temp != null) info.push(`${Math.round(u0.temp)}°`);
-    if (info.length) q.ams.append(el('span', 'ams-meta', info.join(' · ')));
   }
   show(q.ams, q.ams.childElementCount > 0);
 
