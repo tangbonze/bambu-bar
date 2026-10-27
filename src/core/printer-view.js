@@ -169,8 +169,13 @@ function extractFilament(report) {
     }
   }
 
-  const count = units.reduce((n, u) => n + u.slots.length, 0) + (external ? 1 : 0);
-  return { units, external, activeKey, count };
+  // amsSlotCount 单独给出来：面板要区分「这台有没有 AMS」。
+  // 不能拿 count 反推 —— count 把外挂料盘也算进去了，而「有外挂、无 AMS」正是
+  // A1 mini 这类机器的常态（外挂料盘不是 AMS，以前被画在 AMS 标签后面，读起来像
+  // 这台 AMS 里装着一卷白料）。
+  const amsSlotCount = units.reduce((n, u) => n + u.slots.length, 0);
+  const count = amsSlotCount + (external ? 1 : 0);
+  return { units, external, activeKey, count, amsSlotCount };
 }
 
 // 剩余分钟 → 预计完成时刻文案（本机时区），跨自然日标 +1/+2。
@@ -263,6 +268,9 @@ function buildPrinterView({ entry, report, state, now = Date.now(), reason = nul
     filament: {
       current: resolveFilamentColor(r),
       amsCount: filament.count,
+      // 两个「有没有」的布尔量交给渲染层做亮起/置灰，渲染层不自己从数组长度猜。
+      hasAms: filament.amsSlotCount > 0,
+      hasExternal: !!filament.external,
       units: filament.units,
       external: filament.external,
       activeKey: filament.activeKey,

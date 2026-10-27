@@ -237,13 +237,19 @@ function updateCard(v) {
   q.meta.textContent = parts.join('  ·  ');
   show(q.meta, parts.length > 0);
 
-  // AMS / 外挂料盘
+  // AMS / 外置料盘：两个标签各管一段，有则亮、无则灰。
+  // 早前只有一个「AMS」标签，所有料盘槽都挂在它后面 —— 无 AMS 的机器（A1 mini 这类
+  // 只接外挂料盘）于是被画成「AMS：一个白圈」，读起来像 AMS 里装着一卷料。
+  // 现在按来源分标签：AMS 亮起=这台的 AMS 有槽位；外置亮起=接着外挂料盘。
   q.ams.replaceChildren();
   const f = v.filament || {};
   const units = f.units || [];
-  const totalSlots = units.reduce((n, u) => n + u.slots.length, 0);
-  if (totalSlots || f.external) {
-    q.ams.append(el('span', 'ams-tag', t('card.ams')));
+  const amsSlots = units.reduce((n, u) => n + u.slots.length, 0);
+  const hasExt = !!f.external;
+  if (amsSlots || hasExt) {
+    const amsTag = el('span', 'ams-tag' + (amsSlots ? ' on' : ''), t('card.ams'));
+    amsTag.title = amsSlots ? t('card.slots', { n: amsSlots }) : t('card.amsOff');
+    q.ams.append(amsTag);
     units.forEach((u, ui) => {
       if (ui > 0) q.ams.append(el('span', 'ams-sep'));
       for (const s of u.slots) {
@@ -253,18 +259,25 @@ function updateCard(v) {
         q.ams.append(d);
       }
     });
-    if (f.external) {
-      if (totalSlots) q.ams.append(el('span', 'ams-sep'));
-      const d = el('span', 'slot ext' + (f.external.color ? '' : ' unknown') + (f.external.active ? ' active' : ''));
-      if (f.external.color) d.style.setProperty('--c', f.external.color);
-      d.title = t('card.amsExt');
-      q.ams.append(d);
-    }
+
+    q.ams.append(el('span', 'ams-sep'));
+    const extTag = el('span', 'ams-tag' + (hasExt ? ' on' : ''), t('card.ext'));
+    extTag.title = hasExt ? t('card.amsExt') : t('card.extOff');
+    q.ams.append(extTag);
+    // 没接外挂料盘时留一个空心虚框占位：标签后面空着会像是渲染漏了，
+    // 也顺带把同一行的两段对齐，四台机器横着扫的时候位置一致。
+    const extCls = 'slot ext'
+      + (hasExt ? (f.external.color ? '' : ' unknown') + (f.external.active ? ' active' : '') : ' none');
+    const d = el('span', extCls);
+    if (hasExt && f.external.color) d.style.setProperty('--c', f.external.color);
+    d.title = hasExt ? t('card.amsExt') : t('card.extOff');
+    q.ams.append(d);
+
     const info = [];
     const u0 = units[0];
     if (u0 && u0.humidityText) info.push(t('hum.' + u0.humidityText));
     if (u0 && u0.temp != null) info.push(`${Math.round(u0.temp)}°`);
-    if (info.length) q.ams.append(el('span', null, info.join(' · ')));
+    if (info.length) q.ams.append(el('span', 'ams-meta', info.join(' · ')));
   }
   show(q.ams, q.ams.childElementCount > 0);
 
@@ -386,7 +399,7 @@ document.getElementById('btnRefresh').addEventListener('click', async (e) => {
   flash(t('pop.refresh.done'));
   setTimeout(() => btn.classList.remove('spin'), 600);
 });
-const openSet = () => window.bambu.openSettings('account');
+const openSet = () => window.bambu.openSettings('general');
 document.getElementById('btnSettings2').addEventListener('click', openSet);
 document.getElementById('btnQuit').addEventListener('click', () => window.bambu.quit());
 document.addEventListener('keydown', (e) => {

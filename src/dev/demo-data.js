@@ -119,15 +119,10 @@ const state = {
     bed_target_temper: 0,
     wifi_signal: -44,
     nozzle_diameter: 0.4,
-    ams: {
-      tray_now: '255',
-      ams: [amsUnit(0, 2, 25.1, [
-        { color: 'F7D64AFF', type: 'PLA', remain: 84 },
-        { color: '4FBF6BFF', type: 'PLA', remain: 55 },
-        { color: '00000000', type: '', remain: -1 },
-        { color: '00000000', type: '', remain: -1 },
-      ])],
-    },
+    // A1 mini 故意不接 AMS（只挂外挂料盘）—— 四台全带 AMS 的话，面板上「AMS 置灰 /
+    // 外置亮起」这条路就永远走不到，改版时看不出差别。tray_now=254 = 当前吃外挂料。
+    ams: { tray_now: '254', ams: [] },
+    vt_tray: { id: '254', tray_color: 'F7D64AFF', tray_type: 'PLA', remain: 84 },
   },
   h2d: {
     connected: true,

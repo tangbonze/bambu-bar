@@ -82,6 +82,34 @@ test('extractFilament：tray_now=255（无耗材）时不把任何槽标成 acti
   assert.equal(f.activeKey, null);
 });
 
+test('extractFilament：外挂料盘不计入 amsSlotCount（有外挂 ≠ 有 AMS）', () => {
+  const f = extractFilament(printingReport);
+  assert.equal(f.amsSlotCount, 2, '两个 AMS 槽');
+  assert.equal(f.count, 3, 'count 仍含外挂料盘');
+  assert.ok(f.external, '外挂料盘单列');
+});
+
+test('buildPrinterView：无 AMS 的机器 hasAms=false、hasExternal=true', () => {
+  // A1 mini 这类只挂外挂料盘的机器：ams.ams 是空数组，料在 vt_tray 里。
+  const report = {
+    ...printingReport,
+    ams: { tray_now: '254', ams: [] },
+    vt_tray: { id: '254', tray_color: 'F7D64AFF', tray_type: 'PLA', remain: 84 },
+  };
+  const v = buildPrinterView({ entry, report, state: resolveState(report), locale: 'zh-CN' });
+  assert.equal(v.filament.hasAms, false, '面板据此把 AMS 标签置灰');
+  assert.equal(v.filament.hasExternal, true, '外置标签据此类亮起');
+  assert.equal(v.filament.units.length, 0);
+  assert.equal(v.filament.current, '#f7d64a');
+});
+
+test('buildPrinterView：有 AMS 但没接外挂料盘时 hasExternal=false', () => {
+  const report = { ...printingReport, vt_tray: undefined };
+  const v = buildPrinterView({ entry, report, state: resolveState(report), locale: 'zh-CN' });
+  assert.equal(v.filament.hasAms, true);
+  assert.equal(v.filament.hasExternal, false);
+});
+
 test('formatEta：按本机时区算出完成时刻，并给出跨天天数', () => {
   const now = new Date(2026, 9, 26, 23, 0, 0).getTime();
   const eta = formatEta(120, now, 'zh-CN'); // 23:00 + 2h → 次日 01:00

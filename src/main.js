@@ -526,7 +526,7 @@ function showTrayMenu() {
   if (!snap.printers.length) items.push({ label: T('pop.summary.none'), enabled: false });
   items.push({ type: 'separator' });
   items.push({ label: T('pop.refresh'), click: () => refreshAll() });
-  items.push({ label: T('pop.settings'), click: () => openSettings('account') });
+  items.push({ label: T('pop.settings'), click: () => openSettings('general') });
   items.push({ type: 'separator' });
   items.push({
     label: T('menu.demo'),
@@ -745,7 +745,9 @@ function startCloudPoll() {
 }
 
 // ─────────────────────────── 设置窗 ───────────────────────────
-function openSettings(section = 'account') {
+// 默认落「通用」：它是侧栏第一项，也是大多数人点齿轮想找的东西（主题/语言/刷新间隔）。
+// 需要账号或打印机列表的入口（面板空状态的"去登录/加局域网"）会显式传自己的分页。
+function openSettings(section = 'general') {
   if (settingsWin && !settingsWin.isDestroyed()) {
     settingsWin.show();
     settingsWin.focus();
@@ -1007,7 +1009,7 @@ ipcMain.handle('app:refreshOne', (_e, serial) => {
   return true;
 });
 ipcMain.handle('app:copy', (_e, text) => { clipboard.writeText(String(text || '')); return true; });
-ipcMain.handle('app:openSettings', (_e, section) => { hidePopover(); openSettings(section || 'account'); return true; });
+ipcMain.handle('app:openSettings', (_e, section) => { hidePopover(); openSettings(section || 'general'); return true; });
 ipcMain.handle('app:quit', () => { quitting = true; app.quit(); });
 ipcMain.handle('app:diagnostics', () => collectDiagnostics());
 ipcMain.handle('app:revealData', () => { shell.openPath(app.getPath('userData')); return true; });

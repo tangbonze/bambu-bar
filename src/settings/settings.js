@@ -126,8 +126,9 @@ function applyStaticText() {
 }
 
 // ── 分页 ──
+// 顺序即侧栏顺序：通用在最上（设置窗默认落点），账号/打印机是"要办具体事"才去的两页。
 function switchTab(name) {
-  const tab = ['account', 'printers', 'general', 'about'].includes(name) ? name : 'account';
+  const tab = ['general', 'account', 'printers', 'about'].includes(name) ? name : 'general';
   for (const b of document.querySelectorAll('.nav-btn')) b.classList.toggle('active', b.dataset.tab === tab);
   for (const s of document.querySelectorAll('.tab')) s.hidden = s.id !== 'tab-' + tab;
   $('main').scrollTop = 0;
@@ -454,6 +455,6 @@ api.onPrintersChanged(() => { reload().catch(() => {}); });
 (async function init() {
   await loadStrings();
   await reload();
-  switchTab((location.hash || '#account').slice(1));
+  switchTab((location.hash || '#general').slice(1));
   window.addEventListener('hashchange', () => switchTab(location.hash.slice(1)));
 })();

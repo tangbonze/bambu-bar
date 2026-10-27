@@ -272,10 +272,18 @@ body {
   font-size: 10.5px; color: var(--muted);
   flex-wrap: wrap;
 }
+/* 模块标签（AMS / 外置）：默认灰 = 这台没接这个模块，.on 才是「有料、亮起」。
+   灰在这里不是故障色（不加红），只是「没有」；亮起用主色，和面板其它强调同一套。 */
 .ams-tag {
   font-size: 9px; font-weight: 600; letter-spacing: .3px;
   padding: 1.5px 4px; border-radius: 3px;
   background: var(--chip); color: var(--muted);
+  transition: background .12s, color .12s;
+  flex: 0 0 auto;
+}
+.ams-tag.on {
+  background: color-mix(in srgb, var(--c-printing) 13%, transparent);
+  color: var(--c-printing);
 }
 .slot {
   width: 13px; height: 13px; border-radius: 50%;
@@ -290,11 +298,21 @@ body {
 .slot.active {
   box-shadow: 0 0 0 1.5px var(--card), 0 0 0 3px var(--c-printing);
 }
+/* 外置料盘：形状（方）已足够和 AMS 的圆点区分，边框就用实线；
+   虚线只留给「没接外置」的占位，别让「白料」看起来像个空槽。 */
 .slot.ext {
   border-radius: 4px;
-  border: 1px dashed color-mix(in srgb, var(--muted) 75%, transparent);
+  border: 1px solid color-mix(in srgb, var(--muted) 60%, transparent);
+}
+/* 没接外挂料盘的占位：只留一段半透明虚框轮廓 */
+.slot.ext.none {
+  background: transparent;
+  border-style: dashed;
+  opacity: .5;
 }
 .ams-sep { width: 1px; height: 11px; background: var(--line); margin: 0 2px; }
+/* 湿度 / 温度：跟着 AMS 段走，不参与两个标签的对齐 */
+.ams-meta { color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 2px; }
 
 /* 任务名 */
 .job {
