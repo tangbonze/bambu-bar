@@ -12,15 +12,6 @@ const el = (tag, cls, text) => {
 };
 const show = (n, on) => { if (n) n.hidden = !on; };
 
-// 颜色亮度（sRGB 近似）。用来判断「耗材色太浅、当进度条填充会看不见」。
-function luma(hex) {
-  const m = /^#([0-9a-f]{6})$/i.exec(hex || '');
-  if (!m) return 0;
-  const n = parseInt(m[1], 16);
-  const r = (n >> 16) & 255; const g = (n >> 8) & 255; const b = n & 255;
-  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-}
-
 let strings = {};
 let locale = 'zh-CN';
 let snap = null;
@@ -204,14 +195,11 @@ function updateCard(v) {
   show(q.bar.parentElement, showBar);
   if (showBar) {
     q.bar.style.width = `${Math.max(1, Math.min(100, v.progress.percent))}%`;
-    // 打印中直接用耗材颜色填充（白料也看得见 —— 加了描边）
-    if (v.statusClass === 'printing' && v.filament && v.filament.current && luma(v.filament.current) < 0.82) {
-      q.bar.style.background = v.filament.current;
-      q.bar.classList.add('fil');
-    } else {
-      q.bar.style.background = '';
-      q.bar.classList.remove('fil');
-    }
+    // 填充色统一跟状态走（--st）：蓝=打印中、琥珀=暂停、红=失败、绿=完成。
+    // 早前这里用的是耗材色 —— 黑料就是一条黑杠，跟整张卡片的语义色对不上，
+    // 扫一眼也读不出"打印中"。耗材色留给料点圆点，那才是耗材该出现的地方。
+    q.bar.style.background = '';
+    q.bar.classList.remove('fil');
   }
 
   // 指标行

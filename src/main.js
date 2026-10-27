@@ -28,6 +28,14 @@ const { buildPrinterView, summarizeViews } = require('./core/printer-view');
 const { t, bundle } = require('./config/ui-strings');
 const { STRINGS } = require('./config/locales');
 
+// stdout 可能被管道提前关闭（`electron . | head` 之类），此时 console.log 会抛 EPIPE。
+// 未捕获异常会把整个应用带崩（菜单栏应用崩了 = 什么都没了），所以统一吞掉。
+process.stdout.on('error', (e) => { if (!e || e.code !== 'EPIPE') throw e; });
+process.stderr.on('error', (e) => { if (!e || e.code !== 'EPIPE') throw e; });
+function safeLog(...args) {
+  try { console.log(...args); } catch { /* stdout 已关闭，忽略 */ }
+}
+
 const DEV = process.argv.includes('--dev');
 
 app.setName('Bambu Bar');
@@ -493,6 +501,143 @@ function createTray() {
   tray.on('click', () => togglePopover());
   tray.on('right-click', () => showTrayMenu());
   updateTray(lastSnapshot || buildSnapshot());
+  // 轮播计时：多台同时打印时，菜单栏每 TRAY_ROTATE_MS 换一台机器。
+  // 单独起一个 1 秒的钟，而不是指望 MQTT 报文来推动 —— 打印中的帧约 1 秒一帧，
+  // 暂停的机器可能几十秒才来一帧，用报文当计时器会让轮播「卡住不动」。
+  trayRotTimer = setInterval(() => {
+    if (tray) applyTrayTitle(lastSnapshot || buildSnapshot(), Date.now());
+  }, 1000);
+}
+
+// ── 菜单栏文字 ──
+//
+// 早前这里显示的是「所有打印中机器的平均进度」。多台时这个数字是无主的：
+// 一台 90% + 一台 10% 平均成 50%，可实际工作量远不止一半，而且看不出是哪台。
+// 现在改成「机型 + 该机的进度」，多台时轮播 —— 每个数字都明确属于某一台。
+//
+// 失败优先：任何机器失败时显示「!」，不参与轮播。失败是需要处理的事，
+// 用一个不占位置的固定标记，比让它在轮播里一闪而过更可靠（哪台失败由
+// tooltip 和右键菜单给出）。
+const TRAY_ROTATE_MS = 3000;
+let trayRotTimer = null;
+let trayRotKey = '';
+let trayRotIndex = 0;
+let trayRotAt = 0;
+
+// ── 菜单栏文字的宽度控制 ──
+//
+// 轮播时如果文字宽度忽变，菜单栏里右边的时钟会跟着来回跳 —— 比"看不出是哪台"更烦。
+// 所以目标只有一个：每一条菜单栏文字的**像素宽度**必须一样。
+//
+// 这里踩过一个坑：先前按「显示列数」对齐（一个汉字算 2 列），看着齐了，实测却还在抖
+// —— 127 / 137 / 140px 三种宽度来回跳。原因是列宽根本不等于像素宽：
+//   · 数字不是等宽的（菜单栏字体里 '1' 比 '4' 窄 2px）
+//   · 汉字只比拉丁字母宽约 1.7 倍，不是 2 倍
+//   · 补位用的空格只有 3.5px，抵不上一个字母的 9px
+//
+// 于是改成量真实像素宽度再补白。实测结论（本机 macOS）：
+//   · setTitle() 之后 getBounds() 立刻就是新宽度 —— 同步更新，不用等布局
+//   · hair space U+200A ≈ 1px、thin space U+2009 ≈ 2px、NBSP U+00A0 ≈ 3.5px
+//   · 尾随空白不会被系统裁掉（真占宽度）
+// 三种空白混着补，精度能做到 1px。
+const PAD_HAIR = '\u200A';   // ≈1px
+const PAD_THIN = '\u2009';   // ≈2px
+const PAD_NBSP = '\u00A0';   // ≈3.5px
+const TRAY_TARGET_MIN = 120; // 目标宽度下限（px，含图标与系统内边距）
+let trayTargetW = 0;         // 目标宽度：会话内见过的最大自然宽度
+
+// 菜单栏只显示「机型」不显示「名字」。
+// 名字是用户自己起的，可能很长、可能带中文；机型短而稳定（X1C / P1S / A1mini…），
+// 菜单栏这一格寸土寸金，认机型够用了。完整名字留在 tooltip 和面板里。
+function trayModel(v) {
+  const raw = String((v && (v.model || v.name || v.serial)) || '').trim();
+  if (!raw) return '?';
+  return raw.length > 8 ? raw.slice(0, 8) : raw;
+}
+
+// 一条机器的文字：<状态符> <机型> <进度>
+// 状态符：打印中=空格，暂停=‖，准备中=…（三个符号宽度不同，靠后面的补白抹平）
+function trayEntryText(v) {
+  const pct = Number.isFinite(v.progress && v.progress.percent) ? v.progress.percent : null;
+  const slot = pct != null ? String(pct).padStart(3) + '%' : '···';
+  const mark = v.statusClass === 'paused'
+    ? '‖'
+    : (v.stateKey === 'prepare' || v.stateKey === 'changing_filament' ? '…' : ' ');
+  return `${mark} ${trayModel(v)} ${slot}`;
+}
+
+// 把文字补到目标宽度：先按估算铺空白，再按实测微调（最多 4 次，误差 ≤1px）。
+function fitTrayTitle(text, target, natW) {
+  if (!tray || natW >= target) return;
+  const need = target - natW;
+  const nB = Math.floor(need / 3.5);
+  const rem = need - nB * 3.5;
+  const nT = Math.floor(rem / 2);
+  const nH = Math.round(rem - nT * 2);
+  let cand = text + PAD_NBSP.repeat(nB) + PAD_THIN.repeat(nT) + PAD_HAIR.repeat(nH);
+  tray.setTitle(cand);
+  let w = tray.getBounds().width;
+  for (let i = 0; i < 4 && w !== target; i++) {
+    if (w < target) cand += PAD_HAIR;
+    else cand = cand.slice(0, -1);
+    tray.setTitle(cand);
+    w = tray.getBounds().width;
+  }
+}
+
+// 参与轮播的机器：打印中 / 暂停 / 准备中。
+function trayActiveList(snap) {
+  const out = [];
+  for (const v of (snap && snap.printers) || []) {
+    if (v.statusClass === 'printing' || v.statusClass === 'paused'
+      || v.stateKey === 'prepare' || v.stateKey === 'changing_filament') {
+      out.push({ serial: v.serial, text: trayEntryText(v) });
+    }
+  }
+  return out;
+}
+
+function applyTrayTitle(snap, now) {
+  if (!tray) return;
+  const s = (snap && snap.summary) || {};
+  if (!store.get('showTrayPercent', true)) {
+    // 开关关掉：只保留失败标记
+    tray.setTitle(s.failed > 0 ? ' !' : '');
+    return;
+  }
+  const target0 = Math.max(trayTargetW, TRAY_TARGET_MIN);
+  if (s.failed > 0) {
+    // 失败优先：显示「!」，不参与轮播。失败是需要处理的事，用一个不占位置的
+    // 固定标记，比让它在轮播里一闪而过更可靠（哪台失败由 tooltip 和右键菜单给出）。
+    // 宽度同样补到目标值 —— 失败出现/消失时菜单栏不跳。
+    tray.setTitle(' !');
+    fitTrayTitle(' !', target0, tray.getBounds().width);
+    return;
+  }
+  const list = trayActiveList(snap);
+  if (!list.length) {
+    tray.setTitle('');
+    trayRotKey = '';
+    return;
+  }
+  // 轮播：参与机器集合变了（有人开始/结束）就从头开始，否则按时间推进。
+  const key = list.map((x) => x.serial).join(',');
+  if (key !== trayRotKey) {
+    trayRotKey = key;
+    trayRotIndex = 0;
+    trayRotAt = now;
+  }
+  const idx = list.length > 1
+    ? Math.floor((now - trayRotAt) / TRAY_ROTATE_MS) % list.length
+    : 0;
+  trayRotIndex = idx;
+  // 定宽：先量这条文字的自然宽度，抬高目标，再用空白补到目标宽度。
+  // 这样轮播时菜单栏宽度恒定，右边的时钟不会跟着跳。
+  const text = list[idx].text;
+  tray.setTitle(text);
+  const nat = tray.getBounds().width;
+  if (nat > trayTargetW) trayTargetW = nat;
+  fitTrayTitle(text, Math.max(trayTargetW, TRAY_TARGET_MIN), nat);
 }
 
 function updateTray(snap) {
@@ -501,18 +646,16 @@ function updateTray(snap) {
   const active = (snap && snap.printers || []).filter(
     (v) => v.statusClass === 'printing' || v.statusClass === 'paused' || v.statusClass === 'failed',
   );
-  // 菜单栏文字：只有打印中才显示百分比（暂停/失败用图标旁的圆点提示即可，避免长期占宽）。
-  let title = '';
-  if (store.get('showTrayPercent', true) && s.printing > 0 && Number.isFinite(s.avgPercent)) {
-    title = ` ${s.avgPercent}%`;
-  } else if (s.failed > 0) {
-    title = ' !';
-  }
-  tray.setTitle(title);
+  applyTrayTitle(snap, Date.now());
+
+  // tooltip 逐台点名：菜单栏那格只轮到一台，悬停时应该一次看全。
   const parts = [T('app.name')];
-  if (s.total) parts.push(`${s.total}`);
-  if (s.printing) parts.push(T('pop.summary.printing', { n: s.total, printing: s.printing }));
-  else if (active.length) parts.push(statusTextOf(active[0] && runtimes.get(active[0].serial) && runtimes.get(active[0].serial).lastState));
+  for (const v of active.slice(0, 4)) parts.push(`${v.name} ${v.statusText}`);
+  if (active.length > 4) parts.push(`+${active.length - 4}`);
+  if (!active.length) {
+    if (s.total) parts.push(T('pop.summary.idle', { n: s.total }));
+    else parts.push(T('pop.summary.none'));
+  }
   tray.setToolTip(parts.filter(Boolean).join(' · '));
 }
 
@@ -1190,18 +1333,21 @@ function boot() {
   // 设为 hold 时只打印不退出，便于同一次运行里再做截图比对。
   if (process.env.BAMBU_BAR_TRAY_DEBUG) {
     const hold = process.env.BAMBU_BAR_TRAY_DEBUG === 'hold';
-    setTimeout(() => {
+    const dump = () => {
       const snap = lastSnapshot || buildSnapshot();
-      console.log('tray.bounds =', JSON.stringify(tray && tray.getBounds()));
-      console.log('tray.title  =', JSON.stringify(tray && tray.getTitle()));
-      console.log('tray.anchor =', JSON.stringify(trayAnchor()));
-      console.log('popover     =', JSON.stringify(popoverWin && !popoverWin.isDestroyed()
+      safeLog('tray.bounds =', JSON.stringify(tray && tray.getBounds()));
+      safeLog('tray.title  =', JSON.stringify(tray && tray.getTitle()));
+      safeLog('tray.anchor =', JSON.stringify(trayAnchor()));
+      safeLog('popover     =', JSON.stringify(popoverWin && !popoverWin.isDestroyed()
         ? { visible: popoverWin.isVisible(), bounds: popoverWin.getBounds() }
         : null));
-      console.log('summary     =', JSON.stringify(snap.summary));
-      console.log('pref.showTrayPercent =', JSON.stringify(store.get('showTrayPercent', true)));
-      if (!hold) app.exit(0);
-    }, 3500);
+      safeLog('summary     =', JSON.stringify(snap.summary));
+      safeLog('pref.showTrayPercent =', JSON.stringify(store.get('showTrayPercent', true)));
+    };
+    setTimeout(dump, 3500);
+    // hold 模式持续打印：菜单栏文字会随轮播变化，只打一次看不到轮播是否在动。
+    if (hold) setInterval(dump, 1000);
+    if (!hold) setTimeout(() => app.exit(0), 3600);
   }
 }
 

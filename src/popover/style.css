@@ -251,11 +251,11 @@ body {
 .progress > i {
   display: block; height: 100%;
   border-radius: 3px;
+  /* 填充色跟状态走：蓝=打印中、琥珀=暂停、红=失败、绿=完成。
+     不用耗材色 —— 黑料会变成一条黑杠，跟卡片语义色对不上。 */
   background: var(--st, var(--c-printing));
   transition: width .45s cubic-bezier(.4, 0, .2, 1);
 }
-/* 耗材色填充：白料在浅色轨道上几乎看不见，加内描边 + 轻微外描边保住轮廓 */
-.progress > i.fil { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.22), 0 0 0 0.5px rgba(0, 0, 0, 0.10); }
 
 /* 指标行 */
 .meta {

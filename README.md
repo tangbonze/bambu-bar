@@ -8,7 +8,7 @@
 
 ```
 ┌───────────────────────────────┐
-│ 🖨 42%   ← 菜单栏图标 + 打印进度 │
+│ 🖨 X1C 42% ← 菜单栏图标 + 进度  │
 └───────────────────────────────┘
 ```
 
@@ -86,7 +86,9 @@ AMS 的温湿度（`偏干 · 24°`）紧跟在 `AMS` 标签后面，留在 AMS 
 早前画在行末，被读成「外置 24°」。之所以要两个标签：A1 mini 这类只挂外挂料盘、不带 AMS
 的机器，最早的版本把料点挂在唯一的「AMS」标签后面，读起来像「AMS 里装着一卷白料」。
 
-打印中进度条的填充色也会换成当前耗材色；但料太亮（`luma ≥ 0.82`，比如白料）时回退到状态蓝，否则白条在白底上看不见（`src/popover/popover.js:224-230`）。
+打印中进度条的填充色**统一跟状态走**（蓝=打印中、琥珀=暂停、红=失败、绿=完成），不再换成当前耗材色：
+黑料会变成一条黑杠，跟整张卡片的语义色对不上，扫一眼也读不出「打印中」。耗材色只出现在料点圆点上 ——
+那才是耗材该出现的地方。
 
 > 一处已知的语义重叠：蓝色同时表示「打印中」和「局域网直连」（`.chip--lan` 也用 `--c-printing`）。
 > 一台走局域网、但处于暂停状态的机器，会同时出现琥珀色竖条和蓝色 LAN 标签。目前认为可接受；
@@ -97,7 +99,9 @@ AMS 的温湿度（`偏干 · 24°`）紧跟在 `AMS` 标签后面，留在 AMS 
 - **左键点菜单栏图标** → 弹出面板（贴在图标正下方，点别处自动收起）
 - **面板高度跟着打印机数量走**：一台就一小条，四台就四张卡；上限为托盘所在屏工作区的 86%，
   超过后卡片列表内部滚动，页脚（更新时间 / 设置 / 退出）始终可见
-- **菜单栏文字**：有打印机在打印时显示平均进度 `42%`；有失败时显示 `!`（可在设置里关掉）
+- **菜单栏文字**：有打印机在打印时显示「机型 + 进度」（如 `X1C  42%`），多台同时打印时每 3 秒轮播一台；
+  有失败时显示 `!`（可在设置里关掉）。宽度是**按真实像素量出来的**：轮播时菜单栏宽度恒定，右边的时钟不会跟着跳。
+  菜单栏只认机型不认名字（名字可能是用户自定义的长串或中文），完整名字在悬停提示和面板里
 - **右键点图标** → 原生菜单：每台一行状态、立刻刷新、设置、**演示模式**、开机自启、退出
 - **每张卡片底部常驻操作行**：详情、复制状态、重新拉取、从面板隐藏。
   它固定在卡片页脚（右对齐、上方一条 0.5px 分隔线），展开的详情块插在它上面
@@ -285,13 +289,13 @@ Built on top of [YingyiDai/bambu-buddy](https://github.com/YingyiDai/bambu-buddy
 
 **Chamber temperature is model-gated.** Printers without a chamber sensor still report a `chamber_temper` field, but on an A1 / P1S / P1Sc it is a fixed `5` — all three of mine report the same value while their nozzles sit at 21–24 °C and beds at 21–22 °C, i.e. room temperature. It is a firmware placeholder, not a reading, so showing it produces a fake temperature. The capability list therefore comes from Bambu Studio's own machine profiles (`support_chamber_temp_control`; every model defaults to 0 and only H2C, H2D, H2D Pro, H2S, X1E and X2D override it to 1 — note X1 Carbon is 0). A `device.ctc.info.temp` field in the report wins over the list, so a newly released model works without waiting for an update. See `resolveChamberTemp()` in `src/core/printer-view.js`.
 
-**Interaction:** left-click the menu bar icon for the panel (positioned under the icon, dismisses on blur); the menu bar title shows the average print percentage (or `!` when something failed); right-click for a native menu. Every card carries a permanent action row in its footer — details, copy status, pull snapshot, hide from panel — right-aligned above a hairline rule. The row never appears on hover: the panel height is content-measured, so a hover that changed card height would resize the window and make it jitter as the pointer sweeps across cards.
+**Interaction:** left-click the menu bar icon for the panel (positioned under the icon, dismisses on blur); the menu bar title shows "model + progress" (e.g. `X1C  42%`), rotating every 3 s when several printers are printing (or `!` when something failed). Its width is measured in real pixels rather than guessed from character counts, so the title stays exactly the same width while it rotates and the clock next to it does not jump. The title shows the model, not the user-given name — a name can be a long custom string or Chinese — while the full name stays in the tooltip and the panel; right-click for a native menu. Every card carries a permanent action row in its footer — details, copy status, pull snapshot, hide from panel — right-aligned above a hairline rule. The row never appears on hover: the panel height is content-measured, so a hover that changed card height would resize the window and make it jitter as the pointer sweeps across cards.
 
 **Refresh cadence belongs to the printer, not the app.** The panel redraws when the printer pushes a report over MQTT — roughly once a second while printing, about every five seconds when idle — so no timer of its own drives the UI. The footer used to show "updated 2 s ago"; it reset on every incoming frame and therefore read as a five-second refresh cycle, which is why it is gone. The `Online-status check interval` setting only re-checks online / offline and syncs the device list — it does not control temperature, progress or filament.
 
 **Colours** are keyed to *status*, not to the printer: a printer changes state and the whole card changes colour, while two printers in the same state share it. Six semantic colours, one set for light and one for dark (`src/popover/style.css:22-26` / `46-50`): printing `#0a7cff` / `#4c9dff`, paused `#d98300` / `#ffb340`, failed `#d92d20` / `#ff6369`, finished `#1f9d4d` / `#4ac26b`, idle `#86868b` / `#9b9ba2`, offline `#b4b4b9` / `#6a6a72`. `statusClassFromStateKey()` (`src/core/live-telemetry.js:16-27`) folds all 78 `stg_cur` stages into those six; its `default` branch means every recognised-but-unlisted stage counts as printing, so preparing and changing filament get no hue of their own — keeping the palette at six hues is what lets an outlier jump out while scanning. The chosen colour lands in the CSS variable `--st`, shared by four places: the 3px bar down the left of the card, the dot beside the title (pulsing while printing), the status text on the right, and the progress-bar fill.
 
-Filament swatches are a second, independent colour source, reported by the printer as `tray_color` in `RRGGBBAA` rather than defined by the app. `alpha = 00` means "no colour" and renders as a hatched grey dot — real printers report `00000000` for an empty slot, so reading only the first six digits would show it as black filament. The row is split into an `AMS` segment and an `EXT` (external spool) segment, each with its own label; a segment the machine does not have is simply not rendered (no greyed-out placeholder, and the divider only appears when both segments exist). Two labels rather than one because an A1 mini with only an external spool used to render that spool behind the single `AMS` label, which read as "a roll loaded in the AMS". The currently extruding slot gets a blue double ring, the external spool is drawn as a square with a solid outline (shape alone keeps it distinct from the round AMS slots, and the solid outline keeps white filament from looking like an empty slot), and while printing the progress bar takes the filament colour too, falling back to the status blue when the material is too bright to read against the track (`luma ≥ 0.82`, e.g. white).
+Filament swatches are a second, independent colour source, reported by the printer as `tray_color` in `RRGGBBAA` rather than defined by the app. `alpha = 00` means "no colour" and renders as a hatched grey dot — real printers report `00000000` for an empty slot, so reading only the first six digits would show it as black filament. The row is split into an `AMS` segment and an `EXT` (external spool) segment, each with its own label; a segment the machine does not have is simply not rendered (no greyed-out placeholder, and the divider only appears when both segments exist). Two labels rather than one because an A1 mini with only an external spool used to render that spool behind the single `AMS` label, which read as "a roll loaded in the AMS". The currently extruding slot gets a blue double ring, the external spool is drawn as a square with a solid outline (shape alone keeps it distinct from the round AMS slots, and the solid outline keeps white filament from looking like an empty slot), and while printing the progress bar fill now follows the status colour like every other accent (blue printing / amber paused / red failed / green finished) rather than the filament colour — a black filament turned the bar into a black stripe that clashed with the card's semantic palette and no longer read as "printing". The filament colour stays where it belongs, on the swatch dots.
 
 **Appearance** lives in Settings → General (follow system / light / dark) and applies instantly without a restart: the setting only writes `nativeTheme.themeSource`, and both windows take their colours from CSS `prefers-color-scheme`. The panel header keeps a single refresh button — the icon that used to sit there read as a brightness toggle while actually opening settings, so the only settings entry is now the footer link.
 

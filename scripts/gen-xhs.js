@@ -362,7 +362,7 @@ pages.push({
         <div class="a"><span class="dot" style="background:#f5a524"></span><span class="txt"><b>颜色按状态取</b><br>蓝=打印中 琥珀=暂停 红=失败 绿=完成 灰=空闲</span></div>
         <div class="a"><span class="dot" style="background:#17a673"></span><span class="txt"><b>耗材是第二套颜色</b><br>AMS 与外置各带标签，没接的那段直接不出现；出料槽加蓝环</span></div>
         <div class="a"><span class="dot" style="background:#e5484d"></span><span class="txt"><b>错误给的是官方口径</b><br>HMS 码 + 失败原因长句，不是「出错了」三个字</span></div>
-        <div class="a"><span class="dot" style="background:#7c4dff"></span><span class="txt"><b>菜单栏直接显示进度</b><br>有机器在打印时显示平均百分比，有失败显示「!」</span></div>
+        <div class="a"><span class="dot" style="background:#7c4dff"></span><span class="txt"><b>菜单栏直接显示进度</b><br>显示「机型 + 进度」，多台时轮播；宽度按真实像素量，菜单栏不抖</span></div>
       </div>
     </div>`,
     foot: '截图由真实解析链路离屏渲染，非手绘示意',

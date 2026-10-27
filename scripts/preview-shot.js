@@ -75,7 +75,7 @@ ipcMain.handle('settings:state', () => ({
   lanPrinters: [
     { serial: demo.SERIALS.a1m, name: 'A1 mini', model: '', host: '192.168.1.57', hidden: false },
   ],
-  version: '1.0.0',
+  version: require('../package.json').version,
 }));
 ipcMain.handle('settings:setPref', () => true);
 ipcMain.handle('bambu:browserLogin', () => ({ ok: false, canceled: true }));
