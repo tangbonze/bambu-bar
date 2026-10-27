@@ -31,7 +31,7 @@
 | 状态 | 打印中 / 准备中（含 78 种 `stg_cur` 阶段精确文案）/ 换料中 / 暂停（缺料、堵头、温控异常、首层异常、舱门…）/ 完成 / 失败（按官方 HMS 码表归到「断料 / 堵头 / 温度 / 机械 / 校准 / 打印板 / 喷嘴 / AMS」大类）/ 离线 / 登录失效 |
 | 任务 | 文件名（`subtask_name` / `gcode_file`）、进度百分比、当前层 / 总层、剩余时间、**按本机时区算出的预计完成时刻**（跨自然日标 `+1`、`+2`） |
 | 温度 | 喷嘴（当前 / 目标）、热床（当前 / 目标）；腔温**只在带腔温控制器的机型上显示**（H2C / H2D / H2D Pro / H2S / X1E / X2D），其余机型整行不显示 |
-| 耗材 | 当前耗材颜色（双喷头按 `extruder.snow` 定位主喷头）、AMS 各槽颜色 + 材料 + 余量（悬停查看）、外置耗材单列（`AMS` / `外置` 两个标签各自亮起或置灰）、AMS 内部温湿度（`ams.ams[].humidity` / `.temp`，**不是**打印机腔温） |
+| 耗材 | 当前耗材颜色（双喷头按 `extruder.snow` 定位主喷头）、AMS 各槽颜色 + 材料 + 余量（悬停查看）、外置耗材单列（`AMS` / `外置` 两个标签，没接的那段不显示）、AMS 内部温湿度（`ams.ams[].humidity` / `.temp`，**不是**打印机腔温） |
 | 机器 | 速度档（静音 / 标准 / 运动 / 狂暴 + 倍率）、WiFi 信号、喷嘴直径与材质、风扇（模型 / 辅助 / 腔体）、腔灯、舱门 |
 | 错误 | HMS 码（16 位十六进制，悬停显示官方文案）、`fail_reason` 与官方原因长句 |
 
@@ -71,16 +71,17 @@
 | 有颜色 | 实心圆点，直接设 `--c` |
 | `alpha = 00` | 斜纹灰点（`.slot.unknown`）—— 真机空槽报 `00000000`，若取前 6 位会被误当成黑料 |
 | 当前出料槽 | 外加一圈蓝色双环（`.slot.active`） |
-| 外挂料盘 | 圆点画成方形实线框（`.slot.ext`），与 AMS 槽区分；没接时只剩半透明虚框占位 |
+| 外挂料盘 | 圆点画成方形实线框（`.slot.ext`），与 AMS 槽区分 |
 
-耗材这一行分两段，各带一个标签：`AMS` 和 `外置`。标签的状态就是这台机器的配置 ——
-**有料亮起（`.ams-tag.on`，主色淡底）、没接置灰**。AMS 的温湿度（`偏干 · 24°`）紧跟在
-`AMS` 标签后面，留在 AMS 段里 —— 它是 AMS 单元自带传感器的读数（`ams.ams[].humidity` /
-`.temp`），既不是打印机腔温，也不属于外置料盘；早前画在行末，被读成「外置 24°」。
-之所以要两个标签：A1 mini 这类只挂
-外挂料盘、不带 AMS 的机器，最早的版本把料点挂在唯一的「AMS」标签后面，读起来像
-「AMS 里装着一卷白料」。机器没接外挂时标签后面留一个空心虚框（`.slot.ext.none`）占位，
-四台机器横着扫的时候两段位置一致。
+耗材这一行分两段，各带一个标签：`AMS` 和 `外置`。**没接的那段整段不渲染** ——
+标签只在真有这个来源时出现（`.ams-tag`，主色淡底），不存在「灰色占位」状态：
+A1 mini 只挂外挂料盘，就只画 `外置 ▢`；接了 AMS 没接外挂，就只画 `AMS … ● ● ● ●`。
+分隔符也只在两段都在时才画。
+
+AMS 的温湿度（`偏干 · 24°`）紧跟在 `AMS` 标签后面，留在 AMS 段里 —— 它是 AMS 单元自带
+传感器的读数（`ams.ams[].humidity` / `.temp`），既不是打印机腔温，也不属于外置料盘；
+早前画在行末，被读成「外置 24°」。之所以要两个标签：A1 mini 这类只挂外挂料盘、不带 AMS
+的机器，最早的版本把料点挂在唯一的「AMS」标签后面，读起来像「AMS 里装着一卷白料」。
 
 打印中进度条的填充色也会换成当前耗材色；但料太亮（`luma ≥ 0.82`，比如白料）时回退到状态蓝，否则白条在白底上看不见（`src/popover/popover.js:224-230`）。
 
@@ -284,7 +285,7 @@ Built on top of [YingyiDai/bambu-buddy](https://github.com/YingyiDai/bambu-buddy
 
 **Colours** are keyed to *status*, not to the printer: a printer changes state and the whole card changes colour, while two printers in the same state share it. Six semantic colours, one set for light and one for dark (`src/popover/style.css:22-26` / `46-50`): printing `#0a7cff` / `#4c9dff`, paused `#d98300` / `#ffb340`, failed `#d92d20` / `#ff6369`, finished `#1f9d4d` / `#4ac26b`, idle `#86868b` / `#9b9ba2`, offline `#b4b4b9` / `#6a6a72`. `statusClassFromStateKey()` (`src/core/live-telemetry.js:16-27`) folds all 78 `stg_cur` stages into those six; its `default` branch means every recognised-but-unlisted stage counts as printing, so preparing and changing filament get no hue of their own — keeping the palette at six hues is what lets an outlier jump out while scanning. The chosen colour lands in the CSS variable `--st`, shared by four places: the 3px bar down the left of the card, the dot beside the title (pulsing while printing), the status text on the right, and the progress-bar fill.
 
-Filament swatches are a second, independent colour source, reported by the printer as `tray_color` in `RRGGBBAA` rather than defined by the app. `alpha = 00` means "no colour" and renders as a hatched grey dot — real printers report `00000000` for an empty slot, so reading only the first six digits would show it as black filament. The row is split into an `AMS` segment and an `EXT` (external spool) segment, each with its own label: lit in the accent colour when that source has filament, grey when the machine does not have it. Two labels rather than one because an A1 mini with only an external spool used to render that spool behind the single `AMS` label, which read as "a roll loaded in the AMS". The currently extruding slot gets a blue double ring, the external spool is drawn as a square with a solid outline (a faint dashed outline when nothing is connected, so the two segments stay aligned across cards and white filament never looks like an empty slot), and while printing the progress bar takes the filament colour too, falling back to the status blue when the material is too bright to read against the track (`luma ≥ 0.82`, e.g. white).
+Filament swatches are a second, independent colour source, reported by the printer as `tray_color` in `RRGGBBAA` rather than defined by the app. `alpha = 00` means "no colour" and renders as a hatched grey dot — real printers report `00000000` for an empty slot, so reading only the first six digits would show it as black filament. The row is split into an `AMS` segment and an `EXT` (external spool) segment, each with its own label; a segment the machine does not have is simply not rendered (no greyed-out placeholder, and the divider only appears when both segments exist). Two labels rather than one because an A1 mini with only an external spool used to render that spool behind the single `AMS` label, which read as "a roll loaded in the AMS". The currently extruding slot gets a blue double ring, the external spool is drawn as a square with a solid outline (shape alone keeps it distinct from the round AMS slots, and the solid outline keeps white filament from looking like an empty slot), and while printing the progress bar takes the filament colour too, falling back to the status blue when the material is too bright to read against the track (`luma ≥ 0.82`, e.g. white).
 
 **Appearance** lives in Settings → General (follow system / light / dark) and applies instantly without a restart: the setting only writes `nativeTheme.themeSource`, and both windows take their colours from CSS `prefers-color-scheme`. The panel header keeps a single refresh button — the icon that used to sit there read as a brightness toggle while actually opening settings, so the only settings entry is now the footer link.
 

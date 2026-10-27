@@ -237,55 +237,60 @@ function updateCard(v) {
   q.meta.textContent = parts.join('  ·  ');
   show(q.meta, parts.length > 0);
 
-  // AMS / 外置料盘：两个标签各管一段，有则亮、无则灰。
+  // AMS / 外置料盘：各成一段，**没接的那段整段不显示**。
   // 早前只有一个「AMS」标签，所有料盘槽都挂在它后面 —— 无 AMS 的机器（A1 mini 这类
   // 只接外挂料盘）于是被画成「AMS：一个白圈」，读起来像 AMS 里装着一卷料。
-  // 现在按来源分标签：AMS 亮起=这台的 AMS 有槽位；外置亮起=接着外挂料盘。
+  // 现在按来源分标签；而「没有」这件事本身不需要占位置：灰标签、空心占位都只会让
+  // 一行里多出与这台机器无关的元素，直接不画。
   q.ams.replaceChildren();
   const f = v.filament || {};
   const units = f.units || [];
   const amsSlots = units.reduce((n, u) => n + u.slots.length, 0);
+  const hasAms = units.length > 0;   // 有 AMS 单元就算（槽位可能全空，但模块是在的）
   const hasExt = !!f.external;
-  if (amsSlots || hasExt) {
-    const amsTag = el('span', 'ams-tag' + (amsSlots ? ' on' : ''), t('card.ams'));
-    amsTag.title = amsSlots ? t('card.slots', { n: amsSlots }) : t('card.amsOff');
-    q.ams.append(amsTag);
+  if (hasAms || hasExt) {
+    if (hasAms) {
+      const amsTag = el('span', 'ams-tag', t('card.ams'));
+      amsTag.title = amsSlots ? t('card.slots', { n: amsSlots }) : t('card.ams');
+      q.ams.append(amsTag);
 
-    // AMS 自身的温湿度紧跟在「AMS」标签后面 —— 它是 AMS 单元上报的读数，
-    // 既不是打印机腔温（那条走 chamber_temper / device.ctc，按机型门控），
-    // 也不是外置料盘的属性。放在行末（外置段之后）会被读成「外置 29°」。
-    const info = [];
-    const u0 = units[0];
-    if (u0 && u0.humidityText) info.push(t('hum.' + u0.humidityText));
-    if (u0 && u0.temp != null) info.push(`${Math.round(u0.temp)}°`);
-    if (info.length) {
-      const meta = el('span', 'ams-meta', info.join(' · '));
-      meta.title = t('card.amsEnv');
-      q.ams.append(meta);
+      // AMS 自身的温湿度紧跟在「AMS」标签后面 —— 它是 AMS 单元上报的读数，
+      // 既不是打印机腔温（那条走 chamber_temper / device.ctc，按机型门控），
+      // 也不是外置料盘的属性。放在行末会被读成「外置 29°」。
+      const info = [];
+      const u0 = units[0];
+      if (u0.humidityText) info.push(t('hum.' + u0.humidityText));
+      if (u0.temp != null) info.push(`${Math.round(u0.temp)}°`);
+      if (info.length) {
+        const meta = el('span', 'ams-meta', info.join(' · '));
+        meta.title = t('card.amsEnv');
+        q.ams.append(meta);
+      }
+
+      units.forEach((u, ui) => {
+        if (ui > 0) q.ams.append(el('span', 'ams-sep'));
+        for (const s of u.slots) {
+          const d = el('span', 'slot' + (s.color ? '' : ' unknown') + (s.active ? ' active' : ''));
+          if (s.color) d.style.setProperty('--c', s.color);
+          d.title = [s.type, s.remain >= 0 ? `${s.remain}%` : null].filter(Boolean).join(' · ') || '—';
+          q.ams.append(d);
+        }
+      });
     }
 
-    units.forEach((u, ui) => {
-      if (ui > 0) q.ams.append(el('span', 'ams-sep'));
-      for (const s of u.slots) {
-        const d = el('span', 'slot' + (s.color ? '' : ' unknown') + (s.active ? ' active' : ''));
-        if (s.color) d.style.setProperty('--c', s.color);
-        d.title = [s.type, s.remain >= 0 ? `${s.remain}%` : null].filter(Boolean).join(' · ') || '—';
-        q.ams.append(d);
-      }
-    });
-
-    q.ams.append(el('span', 'ams-sep'));
-    const extTag = el('span', 'ams-tag' + (hasExt ? ' on' : ''), t('card.ext'));
-    extTag.title = hasExt ? t('card.amsExt') : t('card.extOff');
-    q.ams.append(extTag);
-    // 没接外挂料盘时留一个空心虚框占位：标签后面空着会像是渲染漏了，
-    // 也顺带把同一行的两段对齐，四台机器横着扫的时候位置一致。
-    const extCls = 'slot ext'
-      + (hasExt ? (f.external.color ? '' : ' unknown') + (f.external.active ? ' active' : '') : ' none');
-    const d = el('span', extCls);
-    if (hasExt && f.external.color) d.style.setProperty('--c', f.external.color);
-    d.title = hasExt ? t('card.amsExt') : t('card.extOff');
-    q.ams.append(d);
+    if (hasExt) {
+      // 分隔符只在两段都在的时候画；单独一段没必要和自己分开
+      if (hasAms) q.ams.append(el('span', 'ams-sep'));
+      const extTag = el('span', 'ams-tag', t('card.ext'));
+      extTag.title = t('card.amsExt');
+      q.ams.append(extTag);
+      const d = el('span', 'slot ext'
+        + (f.external.color ? '' : ' unknown')
+        + (f.external.active ? ' active' : ''));
+      if (f.external.color) d.style.setProperty('--c', f.external.color);
+      d.title = t('card.amsExt');
+      q.ams.append(d);
+    }
   }
   show(q.ams, q.ams.childElementCount > 0);
 

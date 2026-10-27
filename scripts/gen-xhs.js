@@ -360,7 +360,7 @@ pages.push({
       <div class="anno" style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:26px;padding:6px 0">
         <div class="a"><span class="dot"></span><span class="txt"><b>面板高度跟着机器数走</b><br>一台一小条，四台四张卡；超出屏幕内部滚动，页脚始终可见</span></div>
         <div class="a"><span class="dot" style="background:#f5a524"></span><span class="txt"><b>颜色按状态取</b><br>蓝=打印中 琥珀=暂停 红=失败 绿=完成 灰=空闲</span></div>
-        <div class="a"><span class="dot" style="background:#17a673"></span><span class="txt"><b>耗材是第二套颜色</b><br>AMS 与外置各带一个标签：有料亮起、没接置灰；出料槽加蓝环</span></div>
+        <div class="a"><span class="dot" style="background:#17a673"></span><span class="txt"><b>耗材是第二套颜色</b><br>AMS 与外置各带标签，没接的那段直接不出现；出料槽加蓝环</span></div>
         <div class="a"><span class="dot" style="background:#e5484d"></span><span class="txt"><b>错误给的是官方口径</b><br>HMS 码 + 失败原因长句，不是「出错了」三个字</span></div>
         <div class="a"><span class="dot" style="background:#7c4dff"></span><span class="txt"><b>菜单栏直接显示进度</b><br>有机器在打印时显示平均百分比，有失败显示「!」</span></div>
       </div>
