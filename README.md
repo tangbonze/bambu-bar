@@ -110,7 +110,9 @@ bambu-bar/
 │   ├── core/                状态机、视图模型、AMS 取色、完成记忆、错误码查询
 │   ├── config/              状态名/文案/本地化表
 │   └── dev/demo-data.js     演示数据
-├── test/printer-view.test.js  node:test 单测（19 条）：报文 → 视图这一层不靠肉眼验证
+├── test/                   node:test 单测（29 条）：报文 → 视图、错误码查表这一层不靠肉眼验证
+│   ├── printer-view.test.js
+│   └── error-codes.test.js
 ├── ui/                     前端 = Electron 版的 HTML/CSS/JS + 一层 Tauri 适配
 │   ├── index.html          面板
 │   ├── settings.html       设置窗（登录 / 设备 / 局域网直连 / 显示偏好）
@@ -127,6 +129,7 @@ bambu-bar/
     ├── src/mqtt.rs         云 MQTT：深合并、pushall、取消标记、舱门 bit
     ├── src/lan.rs          局域网直连：bblp + 访问码、自签证书、SSDP 发现、试连
     ├── src/auth.rs         拓竹云鉴权（登录 / 短信 / 设备列表 / uid）
+    ├── src/error_codes.rs  官方 HMS 码表：本地 BambuStudio → GitHub，负缓存
     ├── src/state.rs        运行时状态 + TrayItem 粗分类
     ├── src/commands.rs     前端 IPC
     ├── src/config.rs       配置持久化（0600）
@@ -139,7 +142,7 @@ bambu-bar/
 AMS 深合并后「空槽」和「没插料」是两种语义、双喷头取色、跨天 ETA、完成记忆。重写成 Rust 只会多出
 一份可能漂移的实现。传输层才是需要换语言的部分（Electron 的网络栈换成了 rustls + rumqttc）。
 
-这些 JS 现已随仓库一起维护，`npm test` 会先跑那 19 条视图单测、再跑 Rust 单测——视图逻辑改坏了在 CI 就红。
+这些 JS 现已随仓库一起维护，`npm test` 会先跑那 29 条 JS 单测、再跑 Rust 单测——视图逻辑改坏了在 CI 就红。
 
 ---
 
@@ -149,7 +152,7 @@ AMS 深合并后「空槽」和「没插料」是两种语义、双喷头取色�
 npm install            # esbuild（打包 JS）+ @tauri-apps/cli
 npm run build:ui       # 打包 ui/core.bundle.js（tauri build 前会自动跑）
 npm run dev            # npx tauri dev
-npm test               # 19 条视图单测 + 10 条 Rust 单测
+npm test               # 29 条 JS 单测 + 17 条 Rust 单测
 ```
 
 调试开关：
@@ -210,7 +213,7 @@ Linux 两条注意事项：
 | windows | windows-latest | `.exe`（NSIS） |
 | linux | ubuntu-22.04 | `.AppImage` + `.deb` |
 
-打包前会先跑 **19 条 JS 视图单测 + 11 条 Rust 单测**，两套都绿了才出包。
+打包前会先跑 **29 条 JS 单测 + 17 条 Rust 单测**，两套都绿了才出包。
 Linux job 额外装 WebKitGTK 与 AppIndicator——缺这两个库能编过，但运行起来既没图标也没界面。
 
 <details>
@@ -251,14 +254,81 @@ Linux job 额外装 WebKitGTK 与 AppIndicator——缺这两个库能编过，�
 
 ### 已知差异（还没补上的）
 
-Electron 版在登录后会额外拉一份服务器下发的 HMS 错误码表，把失败状态翻译成中文说明
-（面板上「HMS 8A00...」下面那行小字）。Tauri 版这一层还没接：`shim.js` 组装视图时没有传
-`reason`，所以失败卡片只显示 HMS 码本身、没有说明文字。码还在、能搜，只是少了一行中文。
-补齐需要在 Rust 侧加一次「登录后取错误码表」的请求，放到下一个版本。
+登录后的 HMS 错误码表这一层 1.0.5 补上了（见上面「官方 HMS 错误码表」一节），
+Electron 版与 Tauri 版现在的失败说明行为一致。
+
+剩下的差异只有一条：**系统钥匙串**。Electron 版用系统的 `safeStorage` 存拓竹云令牌，
+这里以 0600 权限明文存盘——跨平台钥匙串要三套后端，留到后续版本。
+
+---
+
+## 官方 HMS 错误码表
+
+打印机报失败时只给一个数字码（`HMS 0C0002...`）和一个 `fail_reason`，
+光看数字没人知道发生了什么。拓竹官方把这些码对应到一句中文说明，码表就放在
+BambuStudio 的 `resources/hms/hms_<语言>_<机型代号>.json` 里。
+
+有了它，面板上的失败卡片会多一行官方原文：
+
+```
+HMS  07008007
+耗材挤出异常，请检查挤出机是否堵塞。      ← 这一行是查表得来的
+```
+
+### 机型代号 = 序列号前 3 位
+
+`01P00C560200187` → `01P`（P1 系列）、`03919B610800044` → `039`（A1）。
+码表文件名就是 `hms_zh-cn_01P.json` 这样。
+
+### 取表顺序：先本地，后网络
+
+| 顺序 | 来源 | 说明 |
+| :--- | :--- | :--- |
+| 1 | `~/Library/Application Support/BambuStudio/hms/` | BambuStudio 运行时从服务器拉的，**覆盖 GitHub 上没有的机型** |
+| 2 | `/Applications/BambuStudio.app/Contents/Resources/hms/` | 安装包内置（7 个代号 × 16 种语言） |
+| 3 | 自有缓存 `配置目录/error-codes/` | 从 GitHub 下过一次就存这儿 |
+| 4 | GitHub `bambulab/BambuStudio` 仓库 | 只内置了 7 个代号（093 / 094 / 20P / 22E / 239 / 26A / 31B） |
+
+**第 1 步是关键**：P1（`01P`）、A1（`039`）这些常用机型的表**不在 GitHub 上**，
+只有装了 BambuStudio 才拿得到——BambuStudio 会为连过的每台机器下载对应机型的表。
+没装 BambuStudio 的话，这些机型只能显示 HMS 码、没有中文说明。
+
+表格：
+
+| 表 | 索引 | 对应报文 |
+| :--- | :--- | :--- |
+| `device_error` | 8 位 hex | `fail_reason`（失败主因，如 0300400C = 任务已取消） |
+| `device_hms` | 16 位 hex | `hms[].attr`（高 8 位）+ `hms[].code`（低 8 位） |
+
+### 分工
+
+Rust 只负责「把表弄到手」（找本地文件、下载、缓存），**不解析**；
+解析与查表在 JS 侧（`src/core/bambu-error-codes.js`，从 Electron 版原样保留），
+所以查表逻辑和 Electron 版是同一份文件，不是重写的。
+
+拿不到表就返回 `None`，前端退化成「只显示 HMS 码」——**宁可少说一句，也不给错文案**。
+国内网络访问 GitHub 慢的话，设 `HTTPS_PROXY` 环境变量即可（reqwest 会读）。
+
+### 调试
+
+```bash
+BAMBU_BAR_DEBUG_TRAY=1 /Applications/Bambu\ Bar.app/Contents/MacOS/bambu-bar
+# [error-codes] hms_zh-cn_01P.json ← /Users/fengke/Library/Application Support/BambuStudio/hms/hms_zh-cn_01P.json
+# [error-codes] hms_zh-cn_094.json ← GitHub（已存进自有缓存）
+# [error-codes] hms_zh-cn_00M.json ← GitHub 404（该机型没有官方表）
+```
 
 ---
 
 ## 更新记录
+
+### 1.0.5
+
+- **接上官方 HMS 错误码表**：打印失败时，面板上的 HMS 码下面多一行官方中文说明
+  （如「耗材挤出异常，请检查挤出机是否堵塞。」）。取表顺序：本地 BambuStudio 的缓存 →
+  安装包内置 → GitHub 兜底。详见上面「官方 HMS 错误码表」。
+- 演示模式的失败机器改用**码表里真实存在**的码：原来那几个是随手编的数，
+  查不到文案，演示时永远看不到「失败原因」那一行——而那正是要演示的功能。
 
 ### 1.0.4
 

@@ -403,3 +403,21 @@ pub fn lan_remove(app: AppHandle, state: State<'_, Arc<AppState>>, serial: Strin
     crate::emit_bootstrap(&app, &arc);
     crate::tray::update(&app, &arc);
 }
+
+// ─────────────────────────── 官方 HMS 码表 ───────────────────────────
+
+/// 取某台机器的官方错误码表（原始 JSON）。
+///
+/// 拿不到就返回 `Ok(None)`——前端会退化成「只显示 HMS 码」，不给错文案。
+/// 解析与查表在 JS 侧（`src/core/bambu-error-codes.js`，从 Electron 版原样保留），
+/// 这里只负责「把表弄到手」。
+///
+/// Tauri 的 async command 必须返回 `Result`（带引用的 async command 不允许裸返回值），
+/// 所以失败也包成 `Ok(None)`：这不是错误，只是「这台机器暂时没有码表」。
+#[tauri::command]
+pub async fn error_table(state: State<'_, Arc<AppState>>, serial: String) -> Result<Option<String>, String> {
+    // 锁只用来读配置，取完立刻放掉：await 期间持有 MutexGuard 会让 future 失去 Send。
+    let locale = state.cfg.lock().unwrap().locale.clone();
+    let lang = crate::error_codes::lang_for(&locale);
+    Ok(state.error_tables.table(&serial, lang).await)
+}

@@ -21,10 +21,15 @@ pub struct AppState {
     started: Mutex<HashSet<String>>,
     /// 演示数据循环是否已经在跑（防止重复切换演示开关时起出多条定时器）。
     pub demo_started: AtomicBool,
+    /// 官方 HMS 码表获取器。挂在 state 上是为了复用同一个 HTTP 连接池——
+    /// 每条命令现建一个 Client 会把 TLS 会话和连接池全丢掉。
+    pub error_tables: crate::error_codes::ErrorTables,
 }
 
 impl AppState {
     pub fn new(cfg: Config, config_dir: PathBuf) -> Arc<Self> {
+        let error_tables =
+            crate::error_codes::ErrorTables::new(config_dir.join("error-codes"));
         Arc::new(Self {
             cfg: Mutex::new(cfg),
             config_dir,
@@ -34,6 +39,7 @@ impl AppState {
             conn_errors: Mutex::new(HashMap::new()),
             started: Mutex::new(HashSet::new()),
             demo_started: AtomicBool::new(false),
+            error_tables,
         })
     }
 

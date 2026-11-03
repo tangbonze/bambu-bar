@@ -18,6 +18,8 @@ let strings = { table: {}, locale: 'zh-CN' };
 const reports = new Map();      // serial → 合并后的报文（Rust 已深合并）
 const completion = new Map();   // serial → 完成记忆记录
 const stabilizers = new Map();  // serial → StateStabilizer
+const errorTables = new Map();  // `${lang}_${代号}` → 官方码表（解析后）
+const errorTablePending = new Set(); // 正在取的表，避免并发重复请求
 let snapshot = null;
 let pendingRender = null;
 
@@ -27,6 +29,76 @@ let markReady;
 const ready = new Promise((r) => { markReady = r; });
 
 const T = (key, params) => Core.t(strings.locale, key, params);
+
+// ── 官方 HMS / 错误码表 ──
+//
+// 表从 Rust 那边取（那里负责找本地 BambuStudio 的缓存 / 应用包 / GitHub），
+// 这里只做「解析 + 查表」——逻辑与 Electron 版共用 src/core/bambu-error-codes.js，
+// 同一份文件，不是重写的。
+//
+// 机型代号 = 序列号前 3 位；语言跟着界面 locale 走。两者任一变化就是另一张表，
+// 所以缓存 key 把语言带上。
+
+const hex8 = (n) => (n >>> 0).toString(16).toUpperCase().padStart(8, '0');
+
+function errorTableKey(serial) {
+  const model = Core.errorCodes.modelCodeFromSerial(serial);
+  if (!model) return null;
+  const lang = Core.errorCodes.langForLocale(strings.locale);
+  return `${lang}_${model}`;
+}
+
+function tableFor(serial) {
+  const key = errorTableKey(serial);
+  return key ? (errorTables.get(key) || null) : null;
+}
+
+// 取表失败不报错：那张表只是让失败卡片多一句官方中文说明，没有它也能用。
+async function ensureErrorTable(serial) {
+  const key = errorTableKey(serial);
+  if (!key || errorTables.has(key) || errorTablePending.has(key)) return;
+  errorTablePending.add(key);
+  try {
+    const raw = await invoke('error_table', { serial });
+    if (!raw) return;
+    const lang = key.slice(0, key.indexOf('_'));
+    errorTables.set(key, Core.errorCodes.parseErrorTable(JSON.parse(raw), lang));
+  } catch (e) {
+    console.warn('[error-codes] 取表失败', serial, e);
+  } finally {
+    errorTablePending.delete(key);
+  }
+}
+
+// 报文 + 官方码表 → { text, category, hmsTexts }：
+//   text      失败主因的一句话（如「耗材用尽，请装入新耗材」）
+//   category  粗粒度大类（断料 / 堵头 / 温度…），用于图标与配色
+//   hmsTexts  每条 HMS 码的中文说明（面板上悬停可见）
+function reasonFor(report, table) {
+  if (!report) return null;
+  const hmsTexts = {};
+  if (table && Array.isArray(report.hms)) {
+    for (const h of report.hms) {
+      if (!h || !Number.isFinite(h.attr) || !Number.isFinite(h.code)) continue;
+      const code = hex8(h.attr) + hex8(h.code);
+      const intro = table.deviceHms.get(code);
+      if (intro) hmsTexts[code] = intro;
+    }
+  }
+  return {
+    text: table ? Core.errorCodes.lookupFailureReason(report, table) : null,
+    category: table ? Core.errorCodes.failureCategory(report, table) : null,
+    hmsTexts,
+  };
+}
+
+// 拉全部机器的码表。**不阻塞首屏**——表可能要走网络，面板先出来，
+// 拿到码表后再重渲染一次。
+async function loadErrorTables() {
+  const list = boot.printers || [];
+  await Promise.all(list.map((p) => ensureErrorTable(p.serial)));
+  scheduleRender();
+}
 
 function statusTextOf(state) {
   if (!state) return T('tray.starting');
@@ -59,6 +131,7 @@ function viewFor(entry) {
 
   const view = Core.buildPrinterView({
     entry, report, state, locale: strings.locale, hidden: !!entry.hidden,
+    reason: reasonFor(report, tableFor(entry.serial)),
   });
   view.statusText = statusTextOf(state);
   return view;
@@ -127,6 +200,8 @@ async function init() {
   });
   await listen('bootstrap', (e) => {
     boot = { ...boot, ...e.payload };
+    // 清单可能变了（登录成功、加了局域网机器）：补拉新增机器的码表。
+    loadErrorTables();
     scheduleRender();
   });
 
@@ -144,6 +219,9 @@ async function init() {
 
   markReady();
   scheduleRender();
+
+  // 码表走网络，慢慢来；面板先出来，拿到后自动重渲染。
+  loadErrorTables();
 }
 
 init().catch((e) => {

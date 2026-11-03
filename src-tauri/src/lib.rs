@@ -11,6 +11,7 @@ pub mod auth;
 pub mod commands;
 pub mod config;
 pub mod demo;
+pub mod error_codes;
 pub mod lan;
 pub mod mqtt;
 pub mod printer;
@@ -221,6 +222,7 @@ pub fn run() {
             commands::lan_probe,
             commands::lan_add,
             commands::lan_remove,
+            commands::error_table,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Bambu Bar")

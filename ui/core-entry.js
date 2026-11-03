@@ -11,6 +11,8 @@ const { applyCompletionState } = require('../src/core/completion-state');
 const { StateStabilizer } = require('../src/core/state-stabilizer');
 const { bundle, t } = require('../src/config/ui-strings');
 const demo = require('../src/dev/demo-data');
+// 官方 HMS / 错误码表：解析与查表（纯函数）。表从哪来是 Rust 的事，这里只管算。
+const errorCodes = require('../src/core/bambu-error-codes');
 
 window.BambuCore = {
   resolveState,
@@ -22,4 +24,5 @@ window.BambuCore = {
   bundle,
   t,
   demo,
+  errorCodes,
 };

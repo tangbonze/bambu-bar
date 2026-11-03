@@ -134,7 +134,10 @@ const state = {
     total_layer_num: 280,
     subtask_name: 'enclosure-bracket.3mf',
     task_id: 'demo-task-3',
-    fail_reason: 0x07008009,
+    // 失败码用**官方码表里真实存在**的码（094 = H2D 平台），不是随手编的数：
+    // 编的码查不到文案，demo 就永远展示不出「失败原因」那一行——而那正是要演示的功能。
+    // 0x07008007 = 「耗材挤出异常，请检查挤出机是否堵塞。」
+    fail_reason: 0x07008007,
     nozzle_temper: 219.0,
     nozzle_target_temper: 220,
     bed_temper: 60.0,
@@ -153,7 +156,9 @@ const state = {
         { color: 'D0D0D0FF', type: 'ABS', remain: 66 },
       ])],
     },
-    hms: [{ attr: 0x0C000200, code: 0x00020005 }, { attr: 0x05000500, code: 0x00010007 }],
+    // 0C00020000020006 = 「检测到喷嘴高度过高。请检查喷嘴处是否有残料附着。」
+    // 0500050000010010 = 「检测到未认证的AMS A，或者AMS A固件未升级，无法与打印机配合使用。」
+    hms: [{ attr: 0x0C000200, code: 0x00020006 }, { attr: 0x05000500, code: 0x00010010 }],
   },
 };
 
