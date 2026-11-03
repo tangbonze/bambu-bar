@@ -22,8 +22,11 @@
       "app"
     ],
     "icon": [
-      "icons/icon.png",
-      "icons/icon.icns"
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
     ],
     "category": "Utility",
     "shortDescription": "拓竹打印机菜单栏看板",
