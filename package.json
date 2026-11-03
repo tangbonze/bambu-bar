@@ -8,6 +8,7 @@
     "dev": "npx tauri dev",
     "build": "npx tauri build",
     "build:debug": "cargo build --manifest-path src-tauri/Cargo.toml",
+    "tauri": "tauri",
     "test": "node --test \"test/*.test.js\" && cargo test --manifest-path src-tauri/Cargo.toml",
     "test:js": "node --test \"test/*.test.js\"",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
