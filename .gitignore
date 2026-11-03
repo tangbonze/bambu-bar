@@ -1,15 +1,14 @@
+# 依赖与构建产物
 node_modules/
-dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# esbuild 产物：由 npm run build:ui 生成，构建前会自动重建
+ui/core.bundle.js
+
+# 打包产物
+*.dmg
+*.app/
+
+# 系统垃圾
 .DS_Store
-
-# 本地数据与日志（绝不入库：可能含账号令牌）
-*.log
-config.json
-.env
-.env.*
-
-# 打包中间产物
-assets/icon.iconset/
-
-# 小红书图文生成产物（用 npm run xhs 重新生成）
-xhs/

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Bambu Bar 设置</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg:#f5f7fa; --card:#fff; --fg:#1d2129; --muted:#86909c; --line:rgba(0,0,0,.08);
+    --blue:#1677ff; --ok:#1f9d4d; --warn:#d4380d; --sunken:#eef1f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111318; --card:#1a1d24; --fg:#e5e6eb; --muted:#8a8f99; --line:rgba(255,255,255,.1);
+            --blue:#4a9eff; --ok:#3ecf74; --warn:#ff7875; --sunken:#22262e; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* 关键：button.block 的 display:block 会盖掉 UA 的 [hidden]{display:none}，
+     少了这条，进入二次验证时「登录」按钮根本藏不住。 */
+  [hidden] { display: none !important; }
+  body {
+    font-family: -apple-system, "PingFang SC", system-ui, sans-serif;
+    background: var(--bg); color: var(--fg);
+    padding: 20px 20px 28px; font-size: 13px; -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 16px; letter-spacing: .01em; }
+  .sub { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 6px 0 16px; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 16px; margin-bottom: 12px; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
+  .card h2 { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .06em; }
+  .card-head h2 { margin: 0; }
+
+  .badge { font-size: 11px; padding: 2px 9px; border-radius: 999px; background: var(--sunken); color: var(--muted); white-space: nowrap; }
+  .badge.on { background: rgba(31,157,77,.14); color: var(--ok); }
+
+  .field { margin-bottom: 12px; }
+  .lbl { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+  .tip { font-size: 11px; color: var(--muted); line-height: 1.5; margin-top: 5px; }
+
+  input {
+    width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--fg); font-size: 13px; font-family: inherit;
+  }
+  input::placeholder { color: var(--muted); opacity: .8; }
+  input:focus { outline: 2px solid var(--blue); outline-offset: -1px; border-color: transparent; }
+  input:disabled { opacity: .55; }
+  input.code { font-variant-numeric: tabular-nums; letter-spacing: .28em; font-size: 15px; font-weight: 600; }
+  /* 字距只给真实输入用：占位文字被拉成「6 位 数 字」会看着像坏掉了 */
+  input.code:placeholder-shown { letter-spacing: normal; font-weight: 400; font-size: 13px; }
+
+  .seg { display: flex; gap: 3px; padding: 3px; background: var(--sunken); border-radius: 9px; }
+  .seg button {
+    flex: 1; padding: 6px 8px; border: 0; border-radius: 7px; background: transparent;
+    color: var(--muted); font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer;
+  }
+  .seg button.on { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.14); }
+  /* 二次验证期间锁住区域切换：验证码是发给上面那个账号的，中途换区只会自相矛盾。 */
+  .seg.locked { opacity: .5; pointer-events: none; }
+
+  .with-btn { display: flex; gap: 8px; align-items: stretch; }
+  .with-btn input { flex: 1; min-width: 0; }
+  .with-btn button { flex: 0 0 auto; white-space: nowrap; }
+
+  button { padding: 8px 13px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font-size: 12.5px; font-family: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button.primary { background: var(--blue); color: #fff; border-color: transparent; font-weight: 600; }
+  button.primary:hover:not(:disabled) { filter: brightness(1.06); }
+  button.block { display: block; width: 100%; padding: 10px; margin-top: 2px; }
+  button.ghost { background: var(--bg); color: var(--muted); font-size: 12px; }
+  button.linkbtn { display: block; width: 100%; margin-top: 8px; padding: 6px; border: 0; background: none; color: var(--muted); font-size: 12px; text-decoration: underline; }
+  button:disabled { opacity: .45; cursor: default; }
+
+  .notice { background: rgba(22,119,255,.09); border: 1px solid rgba(22,119,255,.25); color: var(--fg);
+            border-radius: 9px; padding: 10px 12px; font-size: 12px; line-height: 1.6; margin-bottom: 12px; }
+  .notice b { font-weight: 600; }
+
+  .msg { font-size: 12px; min-height: 17px; line-height: 1.5; margin-top: 10px; }
+  .msg.err { color: var(--warn); }
+  .msg.ok { color: var(--ok); }
+  .msg.busy { color: var(--muted); }
+
+  .dev { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .dev:first-child { border-top: 0; padding-top: 0; }
+  .dev .m { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .empty { color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+  /* 扫描结果：一行一台，点一下就把 IP / 序列号填进表单 */
+  .found { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .found-head { font-size: 11px; color: var(--muted); }
+  .found-item {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    text-align: left; padding: 8px 11px; border-radius: 9px; border: 1px solid var(--line);
+    background: var(--sunken); cursor: pointer; font-family: inherit;
+  }
+  .found-item:hover { border-color: var(--blue); }
+  .found-item b { font-size: 13px; font-weight: 600; }
+  .found-item span { font-size: 11px; color: var(--muted); }
+
+  .lanlist { margin-top: 10px; }
+  .lan-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .lan-row .m { flex: 1; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  button.linkbtn.inline { display: inline; width: auto; margin: 0; padding: 2px 4px; text-decoration: underline; }
+
+  .switch { display: flex; align-items: flex-start; gap: 9px; font-size: 12.5px; line-height: 1.5; margin-bottom: 10px; cursor: pointer; }
+  .switch:last-child { margin-bottom: 0; }
+  .switch input { flex: 0 0 auto; width: 15px; height: 15px; margin-top: 1px; accent-color: var(--blue); }
+  .switch span small { display: block; color: var(--muted); font-size: 11px; }
+  #platform { margin-top: 10px; }
+</style>
+</head>
+<body>
+  <h1>Bambu Bar 设置</h1>
+  <p class="sub">登录只用于换取一次访问令牌。密码不会被保存，令牌只写在本机配置文件里。</p>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>拓竹账号</h2>
+      <span class="badge" id="acctBadge">未登录</span>
+    </div>
+
+    <div class="field">
+      <span class="lbl">服务器区域</span>
+      <div class="seg" id="regionSeg" role="tablist" aria-label="服务器区域">
+        <button type="button" data-region="china" class="on">中国区</button>
+        <button type="button" data-region="global">国际区</button>
+      </div>
+      <p class="tip" id="regionTip">账号在哪个区注册就选哪个，选错会提示账号不存在。</p>
+    </div>
+
+    <div class="field">
+      <span class="lbl">登录方式</span>
+      <div class="seg" id="methodSeg" role="tablist" aria-label="登录方式">
+        <button type="button" data-method="password" class="on">账号密码</button>
+        <button type="button" data-method="sms">短信验证码</button>
+      </div>
+    </div>
+
+    <!-- 账号密码 -->
+    <div id="panePassword">
+      <div class="field">
+        <label class="lbl" for="account">账号</label>
+        <input id="account" type="text" placeholder="注册邮箱或手机号" autocomplete="username" spellcheck="false" />
+      </div>
+      <div class="field">
+        <label class="lbl" for="password">密码</label>
+        <div class="with-btn">
+          <input id="password" type="password" placeholder="拓竹账号密码" autocomplete="current-password" />
+          <button type="button" class="ghost" id="btnEye" aria-label="显示密码">显示</button>
+        </div>
+        <p class="tip">密码只用于本次换取令牌，不会写入配置。忘记密码请先在官网重置。</p>
+      </div>
+      <button type="button" class="primary block" id="btnLogin">登录</button>
+
+      <!-- 二次验证：密码正确但账号开了邮箱验证时出现 -->
+      <div id="paneVerify" hidden>
+        <div class="notice" style="margin-top:12px">
+          该账号开启了二次验证。验证码已发送到 <b id="verifyTo">你的邮箱</b>，填入下方即可完成登录。
+        </div>
+        <div class="field">
+          <label class="lbl" for="vcode">邮箱验证码</label>
+          <input id="vcode" class="code" type="text" inputmode="numeric" maxlength="6" placeholder="6 位数字" autocomplete="one-time-code" />
+        </div>
+        <button type="button" class="primary block" id="btnVerify">完成登录</button>
+        <button type="button" class="linkbtn" id="btnBack">换个账号重新登录</button>
+      </div>
+    </div>
+
+    <!-- 短信验证码 -->
+    <div id="paneSms" hidden>
+      <div class="field">
+        <label class="lbl" for="phone">手机号</label>
+        <input id="phone" type="tel" inputmode="tel" placeholder="11 位手机号" autocomplete="tel" />
+      </div>
+      <div class="field">
+        <label class="lbl" for="code">短信验证码</label>
+        <div class="with-btn">
+          <input id="code" class="code" type="text" inputmode="numeric" maxlength="6" placeholder="6 位数字" autocomplete="one-time-code" />
+          <button type="button" id="btnSms">获取验证码</button>
+        </div>
+        <p class="tip">点「获取验证码」后等短信到达，60 秒内可重发。目前仅支持中国区手机号。</p>
+      </div>
+      <button type="button" class="primary block" id="btnSmsLogin">登录</button>
+    </div>
+
+    <div class="msg" id="msg" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>设备</h2>
+      <button type="button" id="btnReload">刷新设备</button>
+    </div>
+    <div id="devices" class="empty">登录后自动拉取账号下绑定的打印机。</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>局域网直连</h2>
+      <button type="button" id="btnLanScan">扫描局域网</button>
+    </div>
+    <p class="tip" style="margin:0 0 12px">
+      不经云端，直接连打印机自己开的 8883 端口：断外网也能看进度，延迟更低。
+      需要在打印机屏幕上开启 <b>设置 → 网络 → 局域网模式</b>，访问码就在那一页。
+    </p>
+
+    <div class="field">
+      <label class="lbl" for="lanHost">打印机 IP</label>
+      <input id="lanHost" type="text" placeholder="例如 192.168.1.23" spellcheck="false" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label class="lbl" for="lanCode">访问码</label>
+      <input id="lanCode" type="text" placeholder="8 位访问码" spellcheck="false" autocomplete="off" />
+      <p class="tip">添加前会先试连一次，访问码不对会当场提示，不会写进配置。</p>
+    </div>
+    <div class="field">
+      <label class="lbl" for="lanSerial">序列号</label>
+      <input id="lanSerial" type="text" placeholder="扫描后自动填入，也可从打印机屏幕抄" spellcheck="false" autocomplete="off" />
+    </div>
+    <input id="lanName" type="hidden" />
+    <input id="lanModel" type="hidden" />
+    <button type="button" class="primary block" id="btnLanAdd">添加局域网打印机</button>
+
+    <div id="lanFound" class="found" hidden></div>
+    <div id="lanList" class="lanlist"></div>
+    <div class="msg" id="lanMsg" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>菜单栏显示</h2></div>
+    <label class="switch">
+      <input type="checkbox" id="trayPct" />
+      <span>显示进度百分比<small>关闭后只显示机型，出错时仍会显示红色标记</small></span>
+    </label>
+    <label class="switch">
+      <input type="checkbox" id="demo" />
+      <span>演示模式<small>用内置假数据预览效果，不连接任何打印机</small></span>
+    </label>
+    <p class="tip" id="platform"></p>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2>其他</h2></div>
+    <button type="button" id="btnLogout">退出登录</button>
+    <p class="tip" style="margin-top:10px">
+      左键点菜单栏图标打开面板，右键打开菜单（刷新 / 设置 / 退出）。
+    </p>
+  </section>
+
+  <script src="settings.js"></script>
+</body>
+</html>

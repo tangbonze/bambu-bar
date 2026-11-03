@@ -1,0 +1,44 @@
+[package]
+name = "bambu-bar"
+version = "1.0.4"
+description = "Bambu Bar — 拓竹打印机菜单栏看板（Tauri 跨平台版）"
+authors = ["冯轲 Ke Feng"]
+edition = "2021"
+rust-version = "1.77"
+build = "build.rs"
+
+[lib]
+name = "bambu_bar_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+rumqttc = { version = "0.24", features = ["use-native-tls", "use-rustls"] }
+# 局域网直连：拓竹打印机的 8883 是自签名证书，必须能注入「跳过校验」的 rustls 配置。
+# 版本跟 rumqttc 0.24 内部依赖的 rustls 对齐（0.22），否则 TlsConfiguration::Rustls 类型对不上。
+rustls = { version = "0.22", default-features = false, features = ["ring", "tls12", "logging"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
+percent-encoding = "2"
+tiny-skia = { version = "0.11", features = ["png-format"] }
+anyhow = "1"
+log = "0.4"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[profile.release]
+opt-level = "s"
+# 全量 LTO + codegen-units=1 的链接阶段要吃掉数 GB 内存、十分钟以上，
+# 在内存受限的环境里会直接被 SIGKILL（exit 137）。thin LTO 的产物体积只差几百 KB，
+# 但链接时间降到零头，构建才可复现。
+lto = "thin"
+codegen-units = 4
+panic = "abort"
+strip = true

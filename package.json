@@ -1,74 +1,20 @@
 {
-  "name": "bambu-bar",
-  "version": "1.0.3",
-  "description": "macOS 菜单栏里的拓竹（Bambu Lab）打印机实时状态面板 / Live status panel for Bambu Lab printers in the macOS menu bar",
-  "author": "冯轲 Ke Feng",
-  "main": "src/main.js",
-  "license": "MIT",
-  "private": false,
+  "name": "bambu-bar-tauri",
+  "version": "1.0.4",
+  "private": true,
+  "description": "Bambu Bar — 拓竹打印机菜单栏看板（Tauri 2 跨平台版）",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron . --dev",
-    "demo": "electron . --demo",
-    "icon": "node scripts/gen-tray-icon.js && node scripts/gen-app-icon.js",
-    "shot": "electron scripts/preview-shot.js",
-    "xhs": "node scripts/gen-xhs.js",
-    "test": "node --test \"test/*.test.js\"",
-    "build:mac": "electron-builder --mac --publish never && node scripts/sign-adhoc.js"
-  },
-  "dependencies": {
-    "electron-store": "8.2.0",
-    "mqtt": "^5.10.1"
+    "build:ui": "esbuild ui/core-entry.js --bundle --format=iife --platform=browser --target=es2020 --outfile=ui/core.bundle.js",
+    "dev": "npx tauri dev",
+    "build": "npx tauri build",
+    "build:debug": "cargo build --manifest-path src-tauri/Cargo.toml",
+    "test": "node --test \"test/*.test.js\" && cargo test --manifest-path src-tauri/Cargo.toml",
+    "test:js": "node --test \"test/*.test.js\"",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "dist": "./scripts/make-dmg.sh"
   },
   "devDependencies": {
-    "electron": "^38.0.0",
-    "electron-builder": "^25.1.8"
-  },
-  "build": {
-    "appId": "com.bambubar.menubar",
-    "productName": "Bambu Bar",
-    "files": [
-      "src/**/*",
-      "assets/**"
-    ],
-    "afterPack": "./scripts/after-pack.js",
-    "mac": {
-      "icon": "assets/icon.icns",
-      "category": "public.app-category.utilities",
-      "target": [
-        {
-          "target": "dir",
-          "arch": [
-            "arm64"
-          ]
-        },
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64"
-          ]
-        }
-      ],
-      "extendInfo": {
-        "LSUIElement": true
-      }
-    }
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/tangbonze/bambu-bar"
-  },
-  "homepage": "https://github.com/tangbonze/bambu-bar",
-  "keywords": [
-    "bambu",
-    "bambulab",
-    "3d-printing",
-    "macos",
-    "electron",
-    "menubar",
-    "menu-bar"
-  ],
-  "bugs": {
-    "url": "https://github.com/tangbonze/bambu-bar/issues"
+    "@tauri-apps/cli": "^2.12.4",
+    "esbuild": "^0.28.2"
   }
 }

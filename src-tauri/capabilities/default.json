@@ -1,0 +1,12 @@
+{
+  "identifier": "default",
+  "description": "Bambu Bar 面板与设置窗所需的最小权限：事件监听 + 窗口尺寸调整。",
+  "windows": ["popover", "settings"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-size",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-set-focus"
+  ]
+}
