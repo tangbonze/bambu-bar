@@ -1,5 +1,5 @@
 {
-  "name": "bambu-bar-tauri",
+  "name": "bambu-bar",
   "version": "1.0.4",
   "private": true,
   "description": "Bambu Bar — 拓竹打印机菜单栏看板（Tauri 2 跨平台版）",
