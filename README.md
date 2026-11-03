@@ -1,5 +1,7 @@
 # Bambu Bar
 
+**[中文](#bambu-bar) | [English](#english)**
+
 拓竹（Bambu Lab）打印机的菜单栏 / 托盘监控面板，Tauri 2 实现，支持 macOS / Windows / Linux。
 
 从 v1.0.4 起，本仓库的主线就是这份 Tauri 实现；Electron 的**平台层**（主进程、preload、旧的双页面前端）
@@ -254,7 +256,7 @@ Linux job 额外装 WebKitGTK 与 AppIndicator——缺这两个库能编过，�
 
 ### 已知差异（还没补上的）
 
-登录后的 HMS 错误码表这一层 1.0.5 补上了（见上面「官方 HMS 错误码表」一节），
+登录后的 HMS 错误码表这一层 1.0.5 补上了（见下面「官方 HMS 错误码表」一节），
 Electron 版与 Tauri 版现在的失败说明行为一致。
 
 剩下的差异只有一条：**系统钥匙串**。Electron 版用系统的 `safeStorage` 存拓竹云令牌，
@@ -269,6 +271,8 @@ Electron 版与 Tauri 版现在的失败说明行为一致。
 BambuStudio 的 `resources/hms/hms_<语言>_<机型代号>.json` 里。
 
 有了它，面板上的失败卡片会多一行官方原文：
+
+![打印失败时的面板：HMS 码下面多一行官方中文说明](docs/panel-failed-hms.png)
 
 ```
 HMS  07008007
@@ -346,3 +350,307 @@ BAMBU_BAR_DEBUG_TRAY=1 /Applications/Bambu\ Bar.app/Contents/MacOS/bambu-bar
 - 仓库主线里的 JS 核心带上了原来的 19 条视图单测，`npm test` 会连同 Rust 单测一起跑。
 - **接上 GitHub Actions**：四平台并行构建（macOS arm64/x64、Windows NSIS、Linux AppImage+deb），
   打包前先跑两套单测。release 里的三个安装包（macOS 双架构 DMG、Windows 安装包）都来自 CI 产物。
+
+---
+
+# English
+
+**[中文](#bambu-bar) | [English](#english)**
+
+A menu bar / system tray monitor for Bambu Lab 3D printers, written in Tauri 2, running on macOS, Windows and Linux.
+
+Since v1.0.4 this repository's main branch *is* the Tauri implementation. The Electron **platform layer** (main process, preload, the old two-page front end) stays behind in the `v1.0.3` tag and in the history. The two are **the same implementation**: the view model and the state machine are still the JS that was calibrated against real printers (it lives in `src/` here and is bundled into the WebView). Only the transport layer (MQTT, auth) and the platform capabilities (tray, windows) moved to Rust. So state detection, filament parsing and finish-time estimation behave **identically** across both versions — there is no drift of the kind "the new version thinks a printer failed".
+
+---
+
+## Measured footprint
+
+Same machine (Apple Silicon), same demo data, sampled after 12 s idle:
+
+| Version | Resident physical footprint | Breakdown |
+| :--- | ---: | :--- |
+| Electron 38 (old) | **257.5 MB** | main 74.5 + GPU 107.0 + network 7.1 + renderer 68.9 |
+| Tauri 2 (this version) | **72.9 MB** | main 38.0 + WebContent 28.2 + Networking 6.7 |
+| Tauri 2 (panel open, real data) | **~78 MB** | main 36.8 + WebContent 41.5 |
+
+- Figures come from `vmmap -summary`'s `Physical footprint`, not `ps`'s RSS (RSS counts shared framework pages more than once).
+- Idle CPU 0.0% (a 1 Hz tray refresh plus MQTT traffic).
+- Measured against a real account: 3 devices (2 printing) rotate correctly, and the first cloud MQTT frame arrives within 2 s of launch.
+- Single-file executable 11.9 MB, `.app` 11 MB, `.dmg` 3.3 MB; the Electron DMG was around 90 MB.
+- When the `--panel` window is not brought to the front, the 28 MB WebContent process is not created either (the window is created lazily).
+
+---
+
+## Cross-platform: tray capabilities are unequal — an OS limitation
+
+| Capability | macOS | Windows | Linux |
+| :--- | :--- | :--- | :--- |
+| Text title in the tray | ✅ `NSStatusItem.setTitle` | ❌ icon + tooltip only | ❌ icon + tooltip only |
+| Template icon (follows light/dark) | ✅ | ❌ needs separate light and dark art | ❌ same |
+| Floating panel positioning | ✅ reads the tray rect | ✅ | ⚠️ constrained under Wayland |
+
+So `tray.rs` exposes a single `update(app, state)` externally, with two implementations inside:
+
+```
+macOS     →  text title " X1C 42%" (pixel-exact fixed width) + template icon
+Win/Linux →  32×32 dynamic bitmap (status-coloured progress ring + centre dot) + tooltip
+```
+
+The Windows / Linux icon is drawn on the fly in Rust with `tiny-skia` (`render_badge`), with no image library or runtime asset dependency.
+
+
+```
+tray.rs unit tests:
+  advance_table_matches_appkit_sample  char-by-char sum == AppKit-measured 62.68px (error <0.05px)
+  entry_text_has_no_padding_of_its_own entry_text emits clean text only (padding lives in pad_centered)
+  padding_is_split_evenly_...          left/right padding differs by ≤1px, total width within ±1px of target
+  percent_slot_is_right_aligned        the "%" of 1% / 42% / 100% lines up exactly
+  width_tracks_content_not_a_fixed_120 short models like the A1 stay under 70px wide
+  slot_width_is_constant_...           every frame of the rotation set pads to the same total width
+  no_state_mark_in_menu_bar            no state ever prefixes ‖ / …
+  eta_crosses_midnight                 a finish time past midnight gets a +1 suffix
+  lan::serial_is_found...              serial numbers are found in SSDP replies by a 15-character signature
+```
+
+Runtime verification (`BAMBU_BAR_DEBUG_TRAY=1`):
+
+```
+[tray] idx=0 target=60.04 width=59.50 rect=Some((617.0, 0.0, 100.0, 30.0)) text="\u{200a}\u{200a}P1S  79%\u{200a}"
+```
+
+`target` stays constant across one rotation set → the width never jumps; padding is split evenly → the text is centred.
+Read back through the accessibility API (`AXExtrasMenuBar`): `title="  P1S  79% " size=(102, 24)` — no `‖`.
+Ink columns in a screenshot: icon 564.5…576.0 pt, text 585.0…639.5 pt, with `P`/`1`/`S`/`7`/`9`/`%` each forming their own run.
+
+---
+
+## Two channels: cloud + LAN direct
+
+| Channel | Auth | Depends on | Best for |
+| :--- | :--- | :--- | :--- |
+| Cloud MQTT | login token (uid + token) | Bambu servers, internet | away from home, viewing across networks |
+| LAN direct | access code (username fixed to `bblp`) | the printer's port 8883 | no internet, low latency, no login |
+
+The two channels are independent and the same printer can be on both: both carry incremental diffs of the form `{"print": {...}}`, and the merge logic is the same `mqtt::merge_payload` (deep merge, cancel markers, chamber-door bits) — whichever arrives first wins.
+A single channel dropping out does not immediately mark the device offline: `set_offline_if_stale` needs "genuinely 90 s without a message" before it flips to offline, because the other channel may have delivered data a second ago.
+
+Three implementation notes for LAN mode:
+
+1. **Certificate validation must be skipped**: the printer uses a self-signed certificate whose hostname is its own IP, so the chain means nothing — the real gate is MQTT's `bblp` + access code. `lan.rs` implements a rustls `ServerCertVerifier` by hand, while the signature algorithms still come from rustls itself (no hand-rolled cryptography). rumqttc's `Native` backend cannot do this, hence the `use-rustls` feature and an injected `ClientConfig`.
+2. **Probe before adding**: `lan_probe` waits only for CONNACK, with an 8-second timeout. Wrong access code, LAN mode not enabled, and not on the same subnet each produce a different Chinese hint — if the probe fails nothing is written to the config, so the menu bar never gains a printer that can never be reached.
+3. **SSDP discovery**: an M-SEARCH to `239.255.255.250:1990`; replies carry model / name / serial number. Field names differ between firmware revisions, so the serial number is not matched by field name at all — it is found by a "15 uppercase alphanumerics" signature.
+
+How to use it: on the printer screen → Settings → Network → LAN mode (the access code shows once it is on), then in the app's settings window under "LAN direct" click "Scan LAN" → pick a printer → enter the 8-digit access code → Add.
+
+> Note: once LAN mode is on, the printer disconnects its own cloud connection (Bambu's own behaviour). If you want both, keep the cloud session alive in Bambu Studio / the phone app and configure both channels here.
+
+---
+
+## Project layout
+
+```
+bambu-bar/
+├── src/                     ★ pure logic core (the very same files as the Electron version, bundled into the WebView by esbuild)
+│   ├── core/                state machine, view model, AMS colour pickup, completion memory, error-code lookup
+│   ├── config/              state names / strings / localisation tables
+│   └── dev/demo-data.js     demo data
+├── test/                   node:test suites (29): message → view, and the error-code lookup layer is verified without eyeballing
+│   ├── printer-view.test.js
+│   └── error-codes.test.js
+├── ui/                     front end = the Electron version's HTML/CSS/JS plus a thin Tauri adapter
+│   ├── index.html          panel
+│   ├── settings.html       settings window (login / devices / LAN direct / display prefs)
+│   ├── settings.js         settings logic: two login paths, second factor, countdown, LAN add/remove
+│   ├── style.css           byte-for-byte identical to the Electron version
+│   ├── popover.js          byte-for-byte identical to the Electron version (only knows window.bambu)
+│   ├── shim.js             ★ the Tauri implementation of window.bambu (IIFE isolated)
+│   ├── actions.js          panel button wiring (refresh / settings / quit)
+│   ├── core-entry.js       bundle entry: exports src/'s pure logic core as window.BambuCore
+│   └── core.bundle.js      esbuild output (generated by npm run build:ui, not committed)
+└── src-tauri/
+    ├── src/tray.rs         tray presentation layer (fixed-width rotation / symmetric padding / dynamic icon / ETA)
+    ├── src/windows.rs      panel and settings window creation, tray-anchored positioning, blur-to-hide
+    ├── src/mqtt.rs         cloud MQTT: deep merge, pushall, cancel markers, chamber-door bits
+    ├── src/lan.rs          LAN direct: bblp + access code, self-signed certificate, SSDP discovery, probe
+    ├── src/auth.rs         Bambu cloud auth (login / SMS / device list / uid)
+    ├── src/error_codes.rs  official HMS code tables: local BambuStudio → GitHub, negative cache
+    ├── src/state.rs        runtime state + coarse TrayItem classification
+    ├── src/commands.rs     front-end IPC
+    ├── src/config.rs       config persistence (0600)
+    └── src/demo.rs         demo data (menu bar side)
+```
+
+### Why the view model stays in JS
+
+`resolveState` / `buildPrinterView` are full of **field-compatibility logic calibrated against real printers**: old and new firmware pack temperatures differently, after a deep AMS merge "empty slot" and "not loaded" are two different meanings, dual-extruder colour pickup, ETA across midnight, completion memory. Rewriting that in Rust would only add a second implementation that could drift. The transport layer is the part that genuinely needed a different language (Electron's network stack became rustls + rumqttc).
+
+That JS is now maintained in this repository, and `npm test` runs the 29 JS tests first and the Rust tests after — if the view logic breaks, CI goes red.
+
+---
+
+## Development
+
+```bash
+npm install            # esbuild (bundles the JS) + @tauri-apps/cli
+npm run build:ui       # bundle ui/core.bundle.js (runs automatically before tauri build)
+npm run dev            # npx tauri dev
+npm test               # 29 JS tests + 17 Rust tests
+```
+
+Debug switches:
+
+```bash
+BAMBU_BAR_DEBUG_TRAY=1 ./target/release/bambu-bar   # prints every title written to the tray and its pixel width
+./target/release/bambu-bar --panel                  # open the panel on launch (screenshots / debugging)
+```
+
+Demo mode: tick "Demo mode" in the settings window, or set `demo_mode: true` in the config.
+Config file locations (field-compatible with the Electron version, so you can copy it straight over):
+
+- macOS `~/Library/Application Support/com.bambubar.menubar/config.json`
+- Windows `%APPDATA%\com.bambubar.menubar\config.json`
+- Linux `~/.config/com.bambubar.menubar/config.json`
+
+---
+
+## Packaging
+
+```bash
+npm run build        # produces the .app only (bundle.targets = ["app"])
+./scripts/make-dmg.sh  # then squeeze out a .dmg
+```
+
+### Two places where this differs from the default flow
+
+1. **No tauri built-in dmg target.** Its `bundle_dmg.sh` drives Finder over AppleScript to place the icon, which fails outright without "Automation" permission or on a newer macOS — and it then marks the **already-built .app** as a packaging failure, with nothing but a one-line deprecated hdiutil warning to show for it. `scripts/make-dmg.sh` never touches Finder: it stages the `.app` and an `/Applications` symlink in a temp dir and runs `hdiutil` to produce a read-only image, which mounts and runs correctly in practice.
+2. **Release builds use thin LTO** (`lto = "thin"`, `codegen-units = 4`). Full LTO with `codegen-units = 1` needs several GB of memory and a dozen-plus minutes at link time, and gets SIGKILLed (exit 137) in memory-constrained environments. Thin LTO costs about 2.6 MB more in artefact size but cuts build time from 12 min 40 s to 5 min 52 s, reproducibly.
+
+| Platform | Artefacts | Requirements |
+| :--- | :--- | :--- |
+| macOS | `.app` + `.dmg` (script-generated) | 10.15+, both Apple Silicon and Intel |
+| Windows | `.msi` / `.exe` | WebView2 (bundled with Win10 1803+ and Win11) |
+| Linux | `.AppImage` / `.deb` | `libwebkit2gtk-4.1`, `libayatana-appindicator3` |
+
+Two Linux notes:
+
+1. Under **Wayland**, global window positioning is unavailable and the panel is anchored to the tray rectangle instead; on GNOME you need the AppIndicator extension to see the icon at all.
+2. The `.deb` `depends` are declared in `tauri.conf.json`, and the `.AppImage` packaging machine needs `libfuse2`.
+
+---
+
+## CI
+
+`.github/workflows/build.yml` runs from the **Actions** tab manually, or automatically when a `v*` tag is pushed.
+Four jobs in parallel:
+
+| Job | Runner | Artefacts |
+| :--- | :--- | :--- |
+| macos-arm64 | macos-14 | `.app` + `.dmg` (`aarch64-apple-darwin`) |
+| macos-x64 | macos-14 | `.app` + `.dmg` (`x86_64-apple-darwin`, cross-compiled) |
+| windows | windows-latest | `.exe` (NSIS) |
+| linux | ubuntu-22.04 | `.AppImage` + `.deb` |
+
+Both suites — **29 JS tests + 17 Rust tests** — must be green before any packaging happens.
+The Linux job additionally installs WebKitGTK and AppIndicator: without those two libraries the build still succeeds, but the app runs with neither icon nor interface.
+
+<details>
+<summary>Traps we hit (read this before changing CI)</summary>
+
+- **Node version**: the quoted-glob form `node --test "test/*.test.js"` is not understood by Node 20 (it treats it as a literal path and fails with `Could not find '.../test/*.test.js'`); only Node 22 supports it natively. CI must use Node 22.
+- **The `macos-13` runner is retired**, so x64 moved to a macos-14 cross-compile. Both macOS jobs are arm64 hosts, so the Rust target is given explicitly by the matrix (`matrix.rust`) instead of being guessed from `matrix.os`.
+- **`tauri-action` calls `npm run tauri build -- <args>`**, so `package.json` must define a `"tauri": "tauri"` script or the build fails with `Missing script: "tauri"`.
+- **Windows needs `icons/icon.ico`.** The repository originally only had the macOS png + icns; the full set is now generated from a 1024×1024 source with `npx tauri icon` (the android/ios directories are unused and were removed). Note that `tauri icon` rewrites the source `icon.png` down to 512×512, which costs macOS icon sharpness — restore the source and `icon.icns` by hand and commit only the new variants.
+- **bash under a UTF-8 locale folds Chinese punctuation after a variable name into the variable name**: in `echo "找不到 $APP，先跑"` the Chinese comma becomes part of the variable name and you get `APP?: unbound variable`. It works on any machine whose locale is not UTF-8, and only breaks in CI. Always write `${APP}` when a non-ASCII character follows a shell variable.
+
+</details>
+
+---
+
+## Trade-offs against the Electron version
+
+Login in the settings window was redesigned: you first pick the **server region** and the **login method**, then fill in **one form**. Early versions put "log in", "send SMS code" and "refresh devices" side by side on one row with the code row hidden behind a click, so users had no idea what to press first — a problem that was explicitly reported.
+Now the e-mail second factor takes over that form directly (the password-login button collapses, account and region are locked, only "finish login" and "use a different account" remain), and after a successful login you get "synced N printers" — because both verification paths pull the device list immediately, so "login succeeded but the device list is empty, press refresh" no longer happens.
+
+Kept: the panel visuals, state semantics, the AMS map, rotation rhythm, the config format.
+Dropped: the system keychain (Electron used `safeStorage`; here the token is stored in cleartext with 0600 permissions — cross-platform keychains need three backends, so that waits for a later version).
+
+### Known differences (still outstanding)
+
+The HMS error-code table layer was added in 1.0.5 (see "The official HMS error code table" below), so the Electron and Tauri versions now behave identically when a print fails.
+
+Only one difference is left: **the system keychain**. The Electron version stores the Bambu cloud token with the OS `safeStorage`; here it is written to disk in cleartext with 0600 permissions — cross-platform keychains need three backends, so that waits for a later version.
+
+---
+
+## The official HMS error code table
+
+When a printer reports a failure it gives you a numeric code (`HMS 0C0002...`) and a `fail_reason`, and the number alone tells nobody what happened. Bambu maps each of those codes to a sentence of Chinese (or English), and the tables live in
+BambuStudio's `resources/hms/hms_<language>_<model-code>.json`.
+
+With the table in hand, a failed card in the panel gains one line of official text:
+
+![The panel on a print failure: one line of official Chinese text below the HMS codes](docs/panel-failed-hms.png)
+
+```
+HMS  07008007
+耗材挤出异常，请检查挤出机是否堵塞。      ← this line comes from the lookup table
+```
+
+### Model code = the first 3 characters of the serial number
+
+`01P00C560200187` → `01P` (P1 series), `03919B610800044` → `039` (A1).
+The table file is named accordingly, e.g. `hms_zh-cn_01P.json`.
+
+### Where the table comes from: local first, network second
+
+| Order | Source | Notes |
+| :--- | :--- | :--- |
+| 1 | `~/Library/Application Support/BambuStudio/hms/` | fetched by BambuStudio at runtime; **covers models GitHub does not have** |
+| 2 | `/Applications/BambuStudio.app/Contents/Resources/hms/` | bundled with the installer (7 model codes × 16 languages) |
+| 3 | own cache at `<config dir>/error-codes/` | stored here after the first download from GitHub |
+| 4 | the `bambulab/BambuStudio` repository on GitHub | only 7 model codes are bundled (093 / 094 / 20P / 22E / 239 / 26A / 31B) |
+
+**Step 1 is the decisive one**: the tables for common models such as P1 (`01P`) and A1 (`039`) are **not on GitHub**. They are only obtainable if BambuStudio is installed, because BambuStudio downloads the table for every printer it has ever been connected to. Without BambuStudio, those models show the HMS code but no explanation.
+
+The tables:
+
+| Table | Index | Message field |
+| :--- | :--- | :--- |
+| `device_error` | 8 hex digits | `fail_reason` (the primary failure reason, e.g. 0300400C = job cancelled) |
+| `device_hms` | 16 hex digits | `hms[].attr` (high 8 digits) + `hms[].code` (low 8 digits) |
+
+### Division of labour
+
+Rust is only responsible for **getting hold of the table** (finding local files, downloading, caching) and does **no parsing**; parsing and lookup live in JS (`src/core/bambu-error-codes.js`, kept byte-for-byte from the Electron version), so the lookup logic is the same file as before, not a rewrite.
+
+If no table can be found the command returns `None` and the front end degrades to showing the HMS code alone — **rather say one sentence too few than give the wrong explanation**. If GitHub is slow from mainland China, set the `HTTPS_PROXY` environment variable (reqwest honours it).
+
+### Debugging
+
+```bash
+BAMBU_BAR_DEBUG_TRAY=1 /Applications/Bambu\ Bar.app/Contents/MacOS/bambu-bar
+# [error-codes] hms_zh-cn_01P.json ← /Users/fengke/Library/Application Support/BambuStudio/hms/hms_zh-cn_01P.json
+# [error-codes] hms_zh-cn_094.json ← GitHub (already stored in the own cache)
+# [error-codes] hms_zh-cn_00M.json ← GitHub 404 (no official table for that model)
+```
+
+---
+
+## Changelog
+
+### 1.0.5
+
+- **Wired up the official HMS error code table**: when a print fails, the panel now shows one line of official Chinese text below the HMS code (e.g. "耗材挤出异常，请检查挤出机是否堵塞。"). Table lookup order: local BambuStudio cache → the installer's bundled copy → GitHub as a fallback. See "The official HMS error code table" above.
+- The demo mode's failing printer now uses a **code that really exists in the table**. The old ones were made-up numbers that never matched any text, so demo mode could never show the "failure reason" line — which was exactly the thing being demonstrated.
+
+### 1.0.4
+
+The release after `v1.0.3`: this version replaced the whole application with Tauri 2 (the Electron platform layer stays in the `v1.0.3` tag and in the history, while the pure logic core under `src/` keeps being maintained on the main branch).
+
+- **Added LAN direct**: `bblp` + access code straight to port 8883, with no dependency on Bambu's servers; SSDP scanning, a probe before adding, and a Chinese hint for a wrong access code. Cloud and LAN can both be attached to the same printer.
+- **Fixed the menu bar text not being centred**: now the width difference is split evenly between the two sides — the widest entry of the rotation set defines the target width, and the remainder is divided between left and right. The width stays constant (the system clock next to it does not jump while rotating) and the text lands in the middle of the item. (Along the way, pinning the item width with `NSStatusItem.setLength` and letting AppKit centre the content was tried and reverted — the item window ended up moved out of the menu bar; see above.)
+- Connection health now flips to offline only after "90 s without a message", so the two channels cannot interrupt each other.
+- New "LAN direct" card in the settings window; window size 580×840.
+- The menu bar drops its state marks: no more `‖` when paused, no more `…` when preparing or changing filament — just "model + progress".
+- The JS core on the main branch carries the original 19 view tests, and `npm test` runs them alongside the Rust tests.
+- **GitHub Actions wired up**: four platforms build in parallel (macOS arm64/x64, Windows NSIS, Linux AppImage + deb), both test suites run before packaging, and the release installers (both macOS DMGs and the Windows installer) all come from CI artefacts.
