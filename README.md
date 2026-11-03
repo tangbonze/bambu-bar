@@ -9,6 +9,67 @@
 （就在本仓库 `src/` 下，打包进 WebView），换成 Rust 的只有传输层（MQTT、鉴权）与平台能力（托盘、窗口）。
 所以两个版本的状态判断、耗材解析、完工时刻推算**一定一致**——不存在「新版把某台机认成失败」这种漂移。
 
+> **macOS 首次打开提示「应用已损坏」？** 1.0.6 之前发布的所有版本都有这个问题，
+> 根因是没有做 bundle 级签名。1.0.6 已修；如果你装的是旧版，看下面
+> [「安装与 Gatekeeper」](#安装与-gatekeeper)一节。
+
+---
+
+## 安装与 Gatekeeper
+
+从 [Releases](https://github.com/tangbonze/bambu-bar/releases) 下载对应平台的安装包。
+
+### macOS 首次打开被拦：两种正常现象
+
+本项目**没有 Apple 开发者证书**，发布的是 **ad-hoc 签名**（`codesign --sign -`）且**没有公证**
+（notarization）。这不是缺陷，是没有付费开发者账号时的正常状态。macOS 的 Gatekeeper 因此会拦一下：
+
+| 现象 | 含义 | 处理 |
+| :--- | :--- | :--- |
+| 「无法验证开发者」 | 正常。签名有效，只是没有 Apple 背书 | 右键点 App →「打开」→ 再点「打开」，或到「系统设置 → 隐私与安全性」点「仍要打开」 |
+| 「应用已损坏，无法打开」 | **1.0.6 之前的版本**（没有 bundle 级签名） | 升级到 1.0.6+，或按下面那条命令清隔离属性 |
+
+命令行放行（等价于上面的点「仍要打开」，一次解决，以后不再拦）：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Bambu Bar.app"
+```
+
+> **不需要 `sudo`。** App 装到 `/Applications` 后属主是你自己，`xattr` 对自己的文件就能改。
+> 加了 `sudo` 也能跑通，但没有必要——而且 `sudo` 会让这条命令在终端里弹密码，
+> 反而更容易被误抄成 `rm -rf` 那一类。
+
+### 为什么之前会报「已损坏」
+
+这不是 quarantine 本身的问题，而是**签名缺了一半**。Tauri 打包出来的 Mach-O 上带着
+链接器自动加的 `linker-signed` 签名（`flags=0x20002(adhoc,linker-signed)`），
+但整个 **bundle 没有被签名**——`Contents/_CodeSignature/` 不存在，资源没有被封印。
+Gatekeeper 校验 bundle 时对不上资源，就报「已损坏」。
+
+对照实验（同一台机器、同一份包，只改签名和隔离属性）：
+
+| 签名 | quarantine | 结果 |
+| :--- | :--- | :--- |
+| 无 bundle 签名 | 有 | **已损坏，无法打开** |
+| 无 bundle 签名 | 无 | 能打开（但没签名保障） |
+| ad-hoc bundle 签名 | 有 | 无法验证开发者（可放行） |
+| ad-hoc bundle 签名 | 无 | 直接打开 |
+
+1.0.6 起 `tauri.conf.json` 里配了 `bundle.macOS.signingIdentity = "-"`，构建时签整个 bundle；
+`scripts/sign-app.sh` 再补一道兜底并用 `codesign --verify --deep --strict` 验证，
+验不过就不出包。
+
+验证签名是否正常：
+
+```bash
+codesign --verify --deep --strict "/Applications/Bambu Bar.app" && echo OK
+```
+
+### Windows / Linux
+
+不需要任何额外操作。Windows 未做代码签名时 SmartScreen 可能提示「Windows 已保护你的电脑」，
+点「更多信息」→「仍要运行」即可。
+
 ---
 
 ## 实测数据
@@ -125,6 +186,9 @@ bambu-bar/
 │   ├── actions.js          面板按钮接线（刷新 / 设置 / 退出）
 │   ├── core-entry.js       打包入口：把 src/ 的纯逻辑核心汇出为 window.BambuCore
 │   └── core.bundle.js      esbuild 产物（npm run build:ui 生成，不入库）
+├── scripts/
+│   ├── make-dmg.sh         自己压 DMG（不用 tauri 的 dmg 目标：它要指挥 Finder 摆图标）
+│   └── sign-app.sh         ad-hoc 签名 .app 并验签，验不过就不出包
 └── src-tauri/
     ├── src/tray.rs         托盘展示层（定宽轮播 / 对称补白 / 动态图标 / ETA）
     ├── src/windows.rs      面板与设置窗的创建、贴托盘定位、失焦收起
@@ -217,6 +281,8 @@ Linux 两条注意事项：
 
 打包前会先跑 **29 条 JS 单测 + 17 条 Rust 单测**，两套都绿了才出包。
 Linux job 额外装 WebKitGTK 与 AppIndicator——缺这两个库能编过，但运行起来既没图标也没界面。
+macOS job 打完包还会跑 `scripts/sign-app.sh` 做 ad-hoc 签名并验签，
+`codesign --verify --deep --strict` 不过就不出包（详见上面「安装与 Gatekeeper」）。
 
 <details>
 <summary>踩过的坑（改 CI 前先看一眼）</summary>
@@ -259,8 +325,15 @@ Linux job 额外装 WebKitGTK 与 AppIndicator——缺这两个库能编过，�
 登录后的 HMS 错误码表这一层 1.0.5 补上了（见下面「官方 HMS 错误码表」一节），
 Electron 版与 Tauri 版现在的失败说明行为一致。
 
-剩下的差异只有一条：**系统钥匙串**。Electron 版用系统的 `safeStorage` 存拓竹云令牌，
-这里以 0600 权限明文存盘——跨平台钥匙串要三套后端，留到后续版本。
+剩下的差异有两条：
+
+1. **系统钥匙串**。Electron 版用系统的 `safeStorage` 存拓竹云令牌，
+   这里以 0600 权限明文存盘——跨平台钥匙串要三套后端，留到后续版本。
+2. **代码签名与公证**。Electron 版也没有 Apple 开发者证书，情况一样；
+   但 1.0.6 之前连 bundle 级签名都没做（只有 Mach-O 上的 `linker-signed`），
+   从浏览器下载后会报「应用已损坏」。1.0.6 已修成 ad-hoc bundle 签名，
+   首次打开仍需放行一次（见上面「安装与 Gatekeeper」）。要彻底免掉这一步，
+   需要付费的 Apple Developer 账号 + Developer ID + 公证。
 
 ---
 
@@ -326,6 +399,18 @@ BAMBU_BAR_DEBUG_TRAY=1 /Applications/Bambu\ Bar.app/Contents/MacOS/bambu-bar
 
 ## 更新记录
 
+### 1.0.6
+
+- **修掉「应用已损坏」**：之前的版本只签了 Mach-O（链接器自动加的 `linker-signed`），
+  整个 bundle 没签——`Contents/_CodeSignature/` 不存在，资源没被封印，
+  从浏览器下载后 Gatekeeper 直接报「应用已损坏，无法打开」。
+  现在 `tauri.conf.json` 配了 `bundle.macOS.signingIdentity = "-"`，构建时签整个 bundle；
+  `scripts/sign-app.sh` 再补一道兜底并用 `codesign --verify --deep --strict` 验证，
+  验不过就不出包。详见上面「安装与 Gatekeeper」。
+- 因为没有 Apple 开发者证书，发布的是 **ad-hoc 签名且未公证**，
+  首次打开仍会被 Gatekeeper 拦一下——但提示从「已损坏」变成正常的「无法验证开发者」，
+  右键「打开」或 `xattr -dr com.apple.quarantine` 放行即可。
+
 ### 1.0.5
 
 - **接上官方 HMS 错误码表**：打印失败时，面板上的 HMS 码下面多一行官方中文说明
@@ -360,6 +445,69 @@ BAMBU_BAR_DEBUG_TRAY=1 /Applications/Bambu\ Bar.app/Contents/MacOS/bambu-bar
 A menu bar / system tray monitor for Bambu Lab 3D printers, written in Tauri 2, running on macOS, Windows and Linux.
 
 Since v1.0.4 this repository's main branch *is* the Tauri implementation. The Electron **platform layer** (main process, preload, the old two-page front end) stays behind in the `v1.0.3` tag and in the history. The two are **the same implementation**: the view model and the state machine are still the JS that was calibrated against real printers (it lives in `src/` here and is bundled into the WebView). Only the transport layer (MQTT, auth) and the platform capabilities (tray, windows) moved to Rust. So state detection, filament parsing and finish-time estimation behave **identically** across both versions — there is no drift of the kind "the new version thinks a printer failed".
+
+> **"The application is damaged and can't be opened" on macOS?** Every release before 1.0.6 had
+> this problem; the cause was a missing bundle-level signature. 1.0.6 fixes it. If you are on an
+> older version, see [Installing and Gatekeeper](#installing-and-gatekeeper) below.
+
+---
+
+## Installing and Gatekeeper
+
+Grab the package for your platform from [Releases](https://github.com/tangbonze/bambu-bar/releases).
+
+### Two normal ways macOS blocks the first launch
+
+This project has **no Apple developer certificate**: the releases are **ad-hoc signed**
+(`codesign --sign -`) and **not notarized**. That is not a defect, it is the normal state without a
+paid developer account — and macOS's Gatekeeper therefore has to stop you once:
+
+| What you see | What it means | What to do |
+| :--- | :--- | :--- |
+| "cannot be opened because the developer cannot be verified" | Normal. The signature is valid, it just has no Apple backing | Right-click the app → Open → Open again, or click "Open Anyway" in System Settings → Privacy & Security |
+| "The application is damaged and can't be opened" | **Versions before 1.0.6** (no bundle-level signature) | Upgrade to 1.0.6+, or run the command below to clear the quarantine flag |
+
+Command-line equivalent (same as clicking "Open Anyway", and it only has to be done once):
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Bambu Bar.app"
+```
+
+> **No `sudo` needed.** Once the app sits in `/Applications` you own it, so `xattr` can change it
+> without elevation. `sudo` also works, but it is unnecessary — and it makes the command prompt for
+> a password, which is exactly how destructive commands get mistyped.
+
+### Why it used to say "damaged"
+
+The quarantine flag was not the culprit — **the signature was only half there**. The Mach-O that Tauri
+produced carried the `linker-signed` signature the linker adds automatically
+(`flags=0x20002(adhoc,linker-signed)`), but the **bundle itself was never signed**:
+`Contents/_CodeSignature/` did not exist, so nothing sealed the resources. Gatekeeper compared the
+bundle against resources it could not match, and reported "damaged".
+
+Controlled comparison (same machine, same package, only the signature and the quarantine flag vary):
+
+| Signature | Quarantine | Result |
+| :--- | :--- | :--- |
+| no bundle signature | yes | **damaged, cannot be opened** |
+| no bundle signature | no | opens (but with no signature guarantee) |
+| ad-hoc bundle signature | yes | developer cannot be verified (dismissible) |
+| ad-hoc bundle signature | no | opens directly |
+
+Since 1.0.6, `tauri.conf.json` sets `bundle.macOS.signingIdentity = "-"` so the whole bundle is
+signed at build time; `scripts/sign-app.sh` adds a fallback and then checks
+`codesign --verify --deep --strict`, refusing to produce a package if that fails.
+
+To check the signature yourself:
+
+```bash
+codesign --verify --deep --strict "/Applications/Bambu Bar.app" && echo OK
+```
+
+### Windows / Linux
+
+Nothing to do. Windows may show "Windows protected your PC" because the binary is unsigned —
+click "More info" → "Run anyway".
 
 ---
 
@@ -467,6 +615,9 @@ bambu-bar/
 │   ├── actions.js          panel button wiring (refresh / settings / quit)
 │   ├── core-entry.js       bundle entry: exports src/'s pure logic core as window.BambuCore
 │   └── core.bundle.js      esbuild output (generated by npm run build:ui, not committed)
+├── scripts/
+│   ├── make-dmg.sh         builds the DMG by hand (not tauri's dmg target: it drives Finder)
+│   └── sign-app.sh         ad-hoc signs the .app and verifies it; no package if verification fails
 └── src-tauri/
     ├── src/tray.rs         tray presentation layer (fixed-width rotation / symmetric padding / dynamic icon / ETA)
     ├── src/windows.rs      panel and settings window creation, tray-anchored positioning, blur-to-hide
@@ -552,6 +703,7 @@ Four jobs in parallel:
 
 Both suites — **29 JS tests + 17 Rust tests** — must be green before any packaging happens.
 The Linux job additionally installs WebKitGTK and AppIndicator: without those two libraries the build still succeeds, but the app runs with neither icon nor interface.
+The macOS job runs `scripts/sign-app.sh` after bundling to ad-hoc sign the app and verify it — if `codesign --verify --deep --strict` fails, no package is produced (see "Installing and Gatekeeper" above).
 
 <details>
 <summary>Traps we hit (read this before changing CI)</summary>
@@ -578,7 +730,10 @@ Dropped: the system keychain (Electron used `safeStorage`; here the token is sto
 
 The HMS error-code table layer was added in 1.0.5 (see "The official HMS error code table" below), so the Electron and Tauri versions now behave identically when a print fails.
 
-Only one difference is left: **the system keychain**. The Electron version stores the Bambu cloud token with the OS `safeStorage`; here it is written to disk in cleartext with 0600 permissions — cross-platform keychains need three backends, so that waits for a later version.
+Two differences are left:
+
+1. **The system keychain.** The Electron version stores the Bambu cloud token with the OS `safeStorage`; here it is written to disk in cleartext with 0600 permissions — cross-platform keychains need three backends, so that waits for a later version.
+2. **Code signing and notarization.** The Electron version had no Apple developer certificate either, so the situation is the same there; but before 1.0.6 not even the bundle was signed (only `linker-signed` on the Mach-O), and a browser download reported "the application is damaged". 1.0.6 fixes that with an ad-hoc bundle signature; the first launch still has to be allowed once (see "Installing and Gatekeeper" above). Doing away with that step entirely needs a paid Apple Developer account, a Developer ID and notarization.
 
 ---
 
@@ -637,6 +792,20 @@ BAMBU_BAR_DEBUG_TRAY=1 /Applications/Bambu\ Bar.app/Contents/MacOS/bambu-bar
 ---
 
 ## Changelog
+
+### 1.0.6
+
+- **Fixed "the application is damaged and can't be opened"**: earlier versions only signed the
+  Mach-O (the `linker-signed` signature the linker adds automatically), never the bundle —
+  `Contents/_CodeSignature/` did not exist, nothing sealed the resources, and Gatekeeper
+  reported the app as damaged when it was downloaded from a browser. `tauri.conf.json` now sets
+  `bundle.macOS.signingIdentity = "-"` so the whole bundle is signed at build time;
+  `scripts/sign-app.sh` adds a fallback and then checks `codesign --verify --deep --strict`,
+  refusing to produce a package if that fails. See "Installing and Gatekeeper" above.
+- There is still no Apple developer certificate, so the releases are **ad-hoc signed and not
+  notarized** and Gatekeeper still stops the first launch — but the message is now the ordinary
+  "developer cannot be verified" instead of "damaged", so right-click → Open (or
+  `xattr -dr com.apple.quarantine`) lets it through.
 
 ### 1.0.5
 

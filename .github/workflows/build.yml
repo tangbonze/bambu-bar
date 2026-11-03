@@ -82,6 +82,15 @@ jobs:
         if: startsWith(matrix.os, 'macos')
         run: ./scripts/make-dmg.sh
 
+      # .app 是单独上传的 artifact（不只 DMG 里有），所以这里再签一次。
+      # tauri.conf.json 的 signingIdentity="-" 已经在 tauri build 阶段签过，
+      # 但交叉编译那条路不一定走到那一步——漏掉的话，从浏览器下载后
+      # Gatekeeper 会报「应用已损坏」而不是「无法验证开发者」。
+      # sign-app.sh 幂等，多跑一次没有副作用；verify 不过就中止，不发包。
+      - name: 签名校验（macOS）
+        if: startsWith(matrix.os, 'macos')
+        run: ./scripts/sign-app.sh
+
       - uses: actions/upload-artifact@v4
         with:
           name: bambu-bar-${{ matrix.name }}

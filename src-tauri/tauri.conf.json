@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Bambu Bar",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "identifier": "com.bambubar.menubar",
   "build": {
     "frontendDist": "../ui",
@@ -32,7 +32,8 @@
     "shortDescription": "拓竹打印机菜单栏看板",
     "longDescription": "在 macOS 菜单栏 / Windows 与 Linux 托盘里实时查看多台拓竹打印机的进度、耗材与完工时刻。",
     "macOS": {
-      "minimumSystemVersion": "10.15"
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": "-"
     },
     "linux": {
       "deb": {

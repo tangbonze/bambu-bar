@@ -1,6 +1,6 @@
 [package]
 name = "bambu-bar"
-version = "1.0.5"
+version = "1.0.6"
 description = "Bambu Bar — 拓竹打印机菜单栏看板（Tauri 跨平台版）"
 authors = ["冯轲 Ke Feng"]
 edition = "2021"

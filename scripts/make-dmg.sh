@@ -28,6 +28,15 @@ APP=$(find_app) || {
   exit 1
 }
 
+# 签名兜底：tauri.conf.json 里配了 signingIdentity="-"，正常情况下 tauri build 已经把整个
+# bundle 签好（Contents/_CodeSignature/CodeResources 存在）。但交叉编译那条路（CI 的
+# x64 job 在 arm64 主机上编 x86_64）不一定走到那一步，一旦漏掉，bundle 就只有 Mach-O 上
+# 链接器自动加的 linker-signed 签名、没有资源封印——从浏览器下载后 Gatekeeper 会直接报
+# 「应用已损坏」，而不是通常的「无法验证开发者」。
+#
+# 详见 scripts/sign-app.sh 里的说明。
+./scripts/sign-app.sh "$APP"
+
 # 版本从 .app 自己的 Info.plist 读，不猜。
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "${APP}/Contents/Info.plist" 2>/dev/null || echo "0.1.0")
 
