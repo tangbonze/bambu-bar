@@ -198,6 +198,44 @@ Linux 两条注意事项：
 
 ---
 
+## CI
+
+`.github/workflows/build.yml` 在 **Actions** 页手动触发，或推 `v*` 标签时自动跑。
+四个矩阵并行：
+
+| Job | Runner | 产物 |
+| :--- | :--- | :--- |
+| macos-arm64 | macos-14 | `.app` + `.dmg`（`aarch64-apple-darwin`） |
+| macos-x64 | macos-14 | `.app` + `.dmg`（`x86_64-apple-darwin`，交叉编译） |
+| windows | windows-latest | `.exe`（NSIS） |
+| linux | ubuntu-22.04 | `.AppImage` + `.deb` |
+
+打包前会先跑 **19 条 JS 视图单测 + 11 条 Rust 单测**，两套都绿了才出包。
+Linux job 额外装 WebKitGTK 与 AppIndicator——缺这两个库能编过，但运行起来既没图标也没界面。
+
+<details>
+<summary>踩过的坑（改 CI 前先看一眼）</summary>
+
+- **Node 版本**：`node --test "test/*.test.js"` 这种带引号的 glob 写法，Node 20 不认
+  （会当成字面路径去找，报 `Could not find '.../test/*.test.js'`），Node 22 才原生支持。
+  CI 里必须用 Node 22。
+- **`macos-13` runner 已下线**，x64 改到 macos-14 交叉编译。因为两个 macOS job 都是 arm64 主机，
+  Rust target 由 matrix 显式给出（`matrix.rust`），不再按 `matrix.os` 猜。
+- **`tauri-action` 调的是 `npm run tauri build -- <args>`**，所以 `package.json` 里必须有
+  `"tauri": "tauri"` 这个脚本，否则报 `Missing script: "tauri"`。
+- **Windows 需要 `icons/icon.ico`**。仓库里原本只有 macOS 用的 png + icns，
+  现在用 `npx tauri icon` 从 1024×1024 源图生成了全套（android/ios 目录用不到，已删）。
+  注意 `tauri icon` 会把源 `icon.png` 改写成 512×512，macOS 图标清晰度会掉——
+  源图和 `icon.icns` 单独还原回原样，只提交新增的变体。
+- **bash 在 UTF-8 locale 下会把变量名后面的中文标点算进变量名**：
+  `echo "找不到 $APP，先跑"` 里的中文逗号会被当成变量名的一部分，
+  报 `APP?: unbound variable`。本机 locale 不是 UTF-8 时怎么跑都正常，只有 CI 炸。
+  shell 脚本里变量后紧跟非 ASCII 标点，一律写 `${APP}`。
+
+</details>
+
+---
+
 ## 与 Electron 版的取舍
 
 设置窗的登录是重新设计的：先选「服务器区域」和「登录方式」，再填**一张表**。
@@ -236,3 +274,5 @@ Electron 版在登录后会额外拉一份服务器下发的 HMS 错误码表，
 - 设置窗新增「局域网直连」卡片；窗口尺寸 580×840。
 - 菜单栏去掉状态符号：暂停不再挂 `‖`、准备/换料不再挂 `…`，只留「机型 + 进度」。
 - 仓库主线里的 JS 核心带上了原来的 19 条视图单测，`npm test` 会连同 Rust 单测一起跑。
+- **接上 GitHub Actions**：四平台并行构建（macOS arm64/x64、Windows NSIS、Linux AppImage+deb），
+  打包前先跑两套单测。release 里的三个安装包（macOS 双架构 DMG、Windows 安装包）都来自 CI 产物。
