@@ -116,8 +116,11 @@ fn rot() -> &'static Mutex<Rot> {
 
 const ROTATE_MS: u128 = 3000;
 
-/// 菜单栏一条机器的文字：`[状态符] <机型> <进度>`
-/// 状态符只在暂停/准备时出现——打印中是常态，多一个空格就是白白占地方。
+/// 菜单栏一条机器的文字：`<机型> <进度>`
+///
+/// 曾经在暂停时加一枚 `‖`、准备/换料时加一枚 `…`（好让菜单栏一眼看出没在打）。
+/// 实测这两枚符号比机型本身还抢眼，用户明确要求「那根竖线不要显示」——已去掉：
+/// 状态在上方面板、tooltip 和托盘图标里都有，菜单栏这一格只留机型 + 进度。
 fn entry_text(item: &TrayItem, show_percent: bool) -> String {
     entry_text_with(item, show_percent, None)
 }
@@ -126,21 +129,15 @@ fn entry_text(item: &TrayItem, show_percent: bool) -> String {
 /// 用 100% 作为宽度上限，百分比跳动时窗口宽度才不会跟着抖。
 fn entry_text_with(item: &TrayItem, show_percent: bool, slot_override: Option<&str>) -> String {
     let model = tray_model(item);
-    let mark = match item.status_class.as_str() {
-        "paused" => "‖",
-        _ if matches!(item.state_key.as_str(), "prepare" | "changing_filament") => "…",
-        _ => "",
-    };
-    let prefix = if mark.is_empty() { String::new() } else { format!("{mark} ") };
     if !show_percent {
-        return format!("{prefix}{model}");
+        return model;
     }
     let slot = match (slot_override, item.percent) {
         (Some(s), _) => s.to_string(),
         (None, Some(p)) => format!("{:>3}%", p.round() as i64),
         (None, None) => "···".to_string(),
     };
-    format!("{prefix}{model} {slot}")
+    format!("{model} {slot}")
 }
 
 /// 某一条在「最宽情况」下的像素宽度（进度按 100% 估）。
@@ -492,5 +489,31 @@ mod tests {
         // 剩余 25 小时：必须带 +1 天后缀，不能被格式化成「01:xx」误导用户。
         let t = eta_text(25.0 * 60.0).expect("eta");
         assert!(t.contains('+'), "{t}");
+    }
+
+    #[test]
+    fn no_state_mark_in_menu_bar() {
+        // 暂停曾经带一枚「‖」前缀，用户反馈那根竖线太抢眼、要去掉。
+        // 这里钉住：任何状态（打印/暂停/准备/换料/空闲）都只能以机型开头。
+        for (state, class) in [
+            ("printing", "printing"),
+            ("paused", "paused"),
+            ("prepare", "prepare"),
+            ("changing_filament", "printing"),
+            ("idle", "idle"),
+        ] {
+            let item = TrayItem {
+                serial: "s".into(), name: "n".into(), model: "P1S".into(),
+                state_key: state.into(), status_class: class.into(),
+                percent: Some(79.0), remain_mins: None, eta: None, job: None, online: true,
+            };
+            let with_pct = entry_text(&item, true);
+            let no_pct = entry_text(&item, false);
+            assert!(with_pct.starts_with("P1S"), "{state} → {with_pct:?} 不能带状态符");
+            assert!(no_pct.starts_with("P1S"), "{state} → {no_pct:?} 不能带状态符");
+            assert_eq!(no_pct, "P1S");
+            // 宽度预算也不能把这些符号算进去，否则轮播时宽度会跟着状态跳
+            assert!((entry_width(&item, true) - text_width("P1S 100%")).abs() < 0.01);
+        }
     }
 }

@@ -59,6 +59,10 @@ Windows / Linux 的图标是 Rust 侧用 `tiny-skia` 现画的（`render_badge`�
 > 本机实测这么干之后条目的窗口会被挪出菜单栏（`AXExtrasMenuBar` 里能查到项、屏幕上却看不到），
 > 属于 tray-icon 与 AppKit 的私下约定，不碰为妙，已回退。
 
+菜单栏这一格**只放机型 + 进度**，不放任何状态符号。原先暂停时会在机型前面挂一枚 `‖`、
+准备/换料时挂一枚 `…`，实测这两枚符号比机型本身还抢眼（用户明确要求「那根竖线不要显示」），
+已整段去掉：状态在上方面板、tooltip 和托盘图标里都有，不必挤进菜单栏。
+
 ```
 tray.rs 单测：
   advance_table_matches_appkit_sample  逐字累加 == AppKit 实测 62.68px（误差 <0.05px）
@@ -67,6 +71,7 @@ tray.rs 单测：
   percent_slot_is_right_aligned        1% / 42% / 100% 的「%」严格对齐
   width_tracks_content_not_a_fixed_120 A1 这类短机型宽度上限 < 70px
   slot_width_is_constant_...           轮播集里每帧补到的总宽度一致
+  no_state_mark_in_menu_bar            任何状态都不带 ‖ / … 前缀
   eta_crosses_midnight                 跨天完工带 +1 后缀
   lan::serial_is_found...              SSDP 回复里按 15 位特征找序列号
 ```
@@ -74,12 +79,12 @@ tray.rs 单测：
 运行时验证（`BAMBU_BAR_DEBUG_TRAY=1`）：
 
 ```
-[tray] idx=0 target=69.30 width=68.76 rect=Some((759.0, 0.0, 109.0, 30.0)) text="\u{200a}\u{200a}‖ P1S  79%\u{200a}"
-[tray] idx=1 target=86.62 width=86.49 rect=... text="\u{a0}\u{a0}\u{a0}\u{a0}P1S  78%\u{a0}..."
+[tray] idx=0 target=60.04 width=59.50 rect=Some((617.0, 0.0, 100.0, 30.0)) text="\u{200a}\u{200a}P1S  79%\u{200a}"
 ```
 
 同一轮播集里 `target` 恒定 → 宽度不跳；补白左右各半 → 文字居中。
-无障碍接口（`AXExtrasMenuBar`）读回：`title="‖ P1S  79%" pos=(683, 3) size=(111, 24)`。
+无障碍接口（`AXExtrasMenuBar`）读回：`title="  P1S  79% " size=(102, 24)`——没有 `‖`。
+截图逐列取墨迹：图标 564.5…576.0pt、文字 585.0…639.5pt，`P`/`1`/`S`/`7`/`9`/`%` 六个字符各自成段。
 
 ---
 
@@ -247,4 +252,5 @@ Electron 版在登录后会额外拉一份服务器下发的 HMS 错误码表，
   （中途试过 `NSStatusItem.setLength` 钉死宽度让 AppKit 自己居中，实测条目窗口会被挪出菜单栏，已回退，见上文。）
 - 连接健康判定改为「90 秒无报文才判离线」，避免两条通道互相打断。
 - 设置窗新增「局域网直连」卡片；窗口尺寸 580×840。
+- 菜单栏去掉状态符号：暂停不再挂 `‖`、准备/换料不再挂 `…`，只留「机型 + 进度」。
 - 仓库主线里的 JS 核心带上了原来的 19 条视图单测，`npm test` 会连同 Rust 单测一起跑。
