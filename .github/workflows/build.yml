@@ -1,0 +1,88 @@
+name: build
+
+# 三平台产物：macOS（arm64 + x64）、Windows（msi/nsis）、Linux（AppImage/deb）。
+# 手动触发即可，避免每次提交都跑一遍完整打包（首次编译约 6~8 分钟）。
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            name: macos-arm64
+            args: --target aarch64-apple-darwin --bundles app
+          - os: macos-13
+            name: macos-x64
+            args: --target x86_64-apple-darwin --bundles app
+          - os: windows-latest
+            name: windows
+            args: --bundles nsis
+          - os: ubuntu-22.04
+            name: linux
+            args: --bundles appimage,deb
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Linux 的托盘是 AppIndicator，WebView 是 WebKitGTK —— 不装这两组依赖
+      # 编译能过但运行起来既没有图标也没有界面。
+      - name: Linux 系统依赖
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev patchelf libfuse2
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-14' && 'aarch64-apple-darwin' || matrix.os == 'macos-13' && 'x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - run: npm ci || npm install
+      - run: npm run build:ui
+
+      # 视图模型那层是纯 JS（报文 → 视图），跟 Rust 各自一套单测，都跑一遍再打包。
+      - name: 单测（JS 视图 + Rust）
+        run: |
+          npm run test:js
+          cargo test --manifest-path src-tauri/Cargo.toml
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: .
+          args: ${{ matrix.args }}
+
+      # DMG 自己打：tauri 自带的 dmg 目标要靠 AppleScript 指挥 Finder 摆图标，
+      # 没有「自动化」授权就会失败，并且把已经打好的 .app 一起判成打包失败。
+      - name: 生成 DMG（macOS）
+        if: startsWith(matrix.os, 'macos')
+        run: ./scripts/make-dmg.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bambu-bar-${{ matrix.name }}
+          path: |
+            src-tauri/target/**/release/bundle/**/*.dmg
+            src-tauri/target/**/release/bundle/**/*.app
+            src-tauri/target/**/release/bundle/**/*.msi
+            src-tauri/target/**/release/bundle/**/*.exe
+            src-tauri/target/**/release/bundle/**/*.AppImage
+            src-tauri/target/**/release/bundle/**/*.deb
+          if-no-files-found: ignore
